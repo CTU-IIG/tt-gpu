@@ -33,11 +33,11 @@ class Block:
         otherthread_upper = block.threadOffset + block.nofThreads
         # Time overlap and thread overlap check
         if (block.end <= self.start) or (self.end <= block.start) or (otherthread_upper<=mythread_lower) or (mythread_upper <= otherthread_lower):
-            print("K"+str(self.kernel)+":"+str(self.id)+" No overlap")
+            #print("K"+str(self.kernel)+":"+str(self.id)+" No overlap")
             # No overlap
             return False
         else:
-            print("K"+str(self.kernel)+":"+str(self.id)+" Overlap")
+            #print("K"+str(self.kernel)+":"+str(self.id)+" Overlap")
             return True
     
     def getEnd(self):
@@ -134,10 +134,13 @@ def adjustThreadOffset(agg_sm):
             occupied.append(block)
 
 
-def drawBlocks(agg_sm, nofKernel, minTime, maxTime):
+def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
     fig = plt.figure()
-    fig.suptitle("Blocks scheduled on SM's")
+    fig.suptitle("Blocks scheduled on SM's\n"+ title)
     colors = cm.get_cmap('viridis', nofKernel).colors
+    if len(agg_sm.keys()) < 2:
+        # add dummy key
+        agg_sm[1]= []
 
     for i, sm in enumerate(agg_sm.keys()):
         ax = fig.add_subplot(2, 1, i+1)
@@ -149,7 +152,7 @@ def drawBlocks(agg_sm, nofKernel, minTime, maxTime):
         ax.set_title("SM "+str(i))
 
 
-def drawScenario(filename):
+def drawScenario(filename, title):
     with open(filename) as f1:
         data = json.load(f1)
 
@@ -173,8 +176,27 @@ def drawScenario(filename):
 
     agg_sm = assignBlocksToSM(nofKernel, nofBlocks, nofThreads, blockTimes, smids, nofRep)
     adjustThreadOffset(agg_sm)
-    drawBlocks(agg_sm, nofKernel, minTime, maxTime)
+    drawBlocks(agg_sm, nofKernel, minTime, maxTime, title)
+
+
 if __name__ == "__main__":
-    filename = "out/512t-2b-1k-4096.json"
-    drawScenario(filename)
+    titles = [
+            "512 threads, 2 blocks, 4 kernel",
+            "512 threads, 2 blocks, 2 kernel",
+            "512 threads, 2 blocks, 1 kernel",
+            "512 threads, 1 blocks, 1 kernel",
+            "512 threads, 1 blocks, 2 kernel",
+            "1024 threads, 1 blocks, 1 kernel",
+            ]
+
+    filenames = [
+                "data-legacy/512t-2b-4k-4096.json",
+                "data-legacy/512t-2b-2k-4096.json",
+                "data-legacy/512t-2b-1k-4096.json",
+                "data-legacy/512t-1b-1k-4096.json",
+                "data-legacy/512t-1b-2k-4096.json",
+                "data-legacy/1024t-1b-1k-4096.json",
+                ]
+    for title, filename in zip(titles, filenames):
+        drawScenario(filename, title)
     plt.show()
