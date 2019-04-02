@@ -53,7 +53,7 @@ def drawCDF(labels, times, fig, title):
         p = 1.0 * np.arange(len(times[i])) / (len(times[i])-1)
         ax.plot(times_sorted,p, label=label)
 
-    ax.set_ylabel("Count")
+    ax.set_ylabel("Probability")
     ax.set_xlabel("Time [ms]")
 #    ax.legend(loc='upper left')
     ax.set_title(title)
@@ -139,29 +139,63 @@ def showTimesAll(filenames, titles):
         interval_agg.append(intervals)
 
 
-    fig = plt.figure(1)
+    fig = plt.figure()
     fig.suptitle("Block intervals")
-    drawHist(titles, interval_agg, fig, "Blockintervals")
-    drawCDF(titles, interval_agg, fig, "Blockintervals")
+    drawHist(titles, interval_agg, fig, "Histogram")
+    drawCDF(titles, interval_agg, fig, "CDF")
 
-    fig = plt.figure(2)
+    fig = plt.figure()
     fig.suptitle("Kernel times")
-    drawHist(titles, times_agg, fig, "Kernel times")
-    drawCDF(titles, times_agg, fig, "Kernel times")
+    drawHist(titles, times_agg, fig, "Histogram")
+    drawCDF(titles, times_agg, fig, "CDF")
 
 
 
 if __name__ == "__main__":
-    titles = [
-            "512 threads, 2 blocks, 4 kernel",
-            "512 threads, 2 blocks, 2 kernel",
-            "512 threads, 2 blocks, 1 kernel",
-            "512 threads, 1 blocks, 1 kernel",
-            "512 threads, 1 blocks, 2 kernel",
-            "1024 threads, 1 blocks, 1 kernel",
+    titles1 = [
+            "Legacy: ni,nj = 4096, 512 threads, 2 blocks, 4 kernel",
+            "Legacy: ni,nj = 4096, 512 threads, 2 blocks, 2 kernel",
+            "Legacy: ni,nj = 4096, 512 threads, 2 blocks, 1 kernel",
+            "Legacy: ni,nj = 4096, 512 threads, 1 blocks, 1 kernel",
+            "Legacy: ni,nj = 4096, 512 threads, 1 blocks, 2 kernel",
+            "Legacy: ni,nj = 4096, 1024 threads, 1 blocks, 1 kernel",
+    ]
+
+    titles2 = [
+            "Legacy: Legacy: ni,nj = 1024, 512 threads, 2 blocks, 4 kernel",
+            "Legacy: Legacy: ni,nj = 1024, 512 threads, 2 blocks, 2 kernel",
+            "Legacy: Legacy: ni,nj = 1024, 512 threads, 2 blocks, 1 kernel",
+            "Legacy: Legacy: ni,nj = 1024, 512 threads, 1 blocks, 1 kernel",
+            "Legacy: Legacy: ni,nj = 1024, 512 threads, 1 blocks, 2 kernel",
+            "Legacy: Legacy: ni,nj = 1024, 1024 threads, 1 blocks, 1 kernel",
             ]
 
-    filenames = [
+    title13 = [
+            "ni,nj = 512, 256 threads, 2 blocks, 4 kernel",
+            "ni,nj = 512, 256 threads, 2 blocks, 2 kernel",
+            "ni,nj = 512, 256 threads, 2 blocks, 1 kernel",
+            "ni,nj = 512, 256 threads, 1 blocks, 1 kernel",
+            "ni,nj = 512, 256 threads, 1 blocks, 2 kernel",
+            "ni,nj = 512, 512 threads, 1 blocks, 1 kernel",
+            ]
+
+    titles4 = [
+            "Legacy: ni,nj = 1026x1022, 512 threads, 2 blocks, 4 kernel",
+            "Legacy: ni,nj = 1026x1022, 512 threads, 2 blocks, 2 kernel",
+            "Legacy: ni,nj = 1026x1022, 512 threads, 2 blocks, 1 kernel",
+            "Legacy: ni,nj = 1026x1022, 512 threads, 1 blocks, 1 kernel",
+            "Legacy: ni,nj = 1026x1022, 512 threads, 1 blocks, 2 kernel",
+            ]
+
+    titles5 = [
+            "PREM: ni,nj = 1026x1022, 512 threads, 2 blocks, 4 kernel",
+            "PREM: ni,nj = 1026x1022, 512 threads, 2 blocks, 2 kernel",
+            "PREM: ni,nj = 1026x1022, 512 threads, 2 blocks, 1 kernel",
+            "PREM: ni,nj = 1026x1022, 512 threads, 1 blocks, 1 kernel",
+            "PREM: ni,nj = 1026x1022, 512 threads, 1 blocks, 2 kernel",
+            ]
+
+    filenames1 = [
                 "data-legacy/512t-2b-4k-4096.json",
                 "data-legacy/512t-2b-2k-4096.json",
                 "data-legacy/512t-2b-1k-4096.json",
@@ -169,9 +203,47 @@ if __name__ == "__main__":
                 "data-legacy/512t-1b-2k-4096.json",
                 "data-legacy/1024t-1b-1k-4096.json",
                 ]
+    
+    filenames2 = [
+                "data-legacy-1024/512t-2b-4k-1024.json",
+                "data-legacy-1024/512t-2b-2k-1024.json",
+                "data-legacy-1024/512t-2b-1k-1024.json",
+                "data-legacy-1024/512t-1b-1k-1024.json",
+                "data-legacy-1024/512t-1b-2k-1024.json",
+                "data-legacy-1024/1024t-1b-1k-1024.json",
+                ]
 
+    filenames3 = [
+                "data-legacy-512/256t-2b-4k-512.json",
+                "data-legacy-512/256t-2b-2k-512.json",
+                "data-legacy-512/256t-2b-1k-512.json",
+                "data-legacy-512/256t-1b-1k-512.json",
+                "data-legacy-512/256t-1b-2k-512.json",
+                "data-legacy-512/512t-1b-1k-512.json",
+                ]
+
+    filenames4 = [
+                "prem-leg-comp/512t-2b-4k-1024-legacy.json",
+                "prem-leg-comp/512t-2b-2k-1024-legacy.json",
+                "prem-leg-comp/512t-2b-1k-1024-legacy.json",
+                "prem-leg-comp/512t-1b-1k-1024-legacy.json",
+                "prem-leg-comp/512t-1b-2k-1024-legacy.json",
+                ]
+
+    filenames5 = [
+                "prem-leg-comp/512t-2b-4k-1024-prem.json",
+                "prem-leg-comp/512t-2b-2k-1024-prem.json",
+                "prem-leg-comp/512t-2b-1k-1024-prem.json",
+                "prem-leg-comp/512t-1b-1k-1024-prem.json",
+                "prem-leg-comp/512t-1b-2k-1024-prem.json",
+                ]
+    
     #for title, filename in zip(titles, filenames):
     #    showTimesKernel(filename, title)
 
-    showTimesAll(filenames, titles)
+    #showTimesAll(filenames1, titles1)
+    #showTimesAll(filenames2, titles2)
+    #showTimesAll(filenames3, titles3)
+    showTimesAll(filenames4, titles4)
+    showTimesAll(filenames5, titles5)
     plt.show()

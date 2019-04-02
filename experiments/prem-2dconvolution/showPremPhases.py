@@ -58,16 +58,23 @@ def showTimesAll(filenames, titles):
 
 
 if __name__ == "__main__":
-    titles = [
+    titles1 = [
             "512 threads, 1 blocks, 1 kernel",
             ]
+    titles2 = [
+            "512 threads, 2 blocks, 1 kernel",
+            ]
 
-    filenames = [
-                "out/prem-prof-1-block.json",
+    filenames1 = [
+                "phases/prem-prof-1-block.json",
+                ]
+    filenames2 = [
+                "phases/prem-prof-2-block.json",
                 ]
 
     #for title, filename in zip(titles, filenames):
     #    showTimesKernel(filename, title)
 
-    showTimesAll(filenames, titles)
+    showTimesAll(filenames1, titles2)
+    showTimesAll(filenames2, titles2)
     plt.show()

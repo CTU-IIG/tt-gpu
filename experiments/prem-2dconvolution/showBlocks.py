@@ -20,7 +20,7 @@ class Block:
     def draw(self, ax, colors):
         thread_lower = self.threadOffset
         thread_upper = self.threadOffset + self.nofThreads
-        ax.fill_between([self.start, self.end], [thread_upper, thread_upper], [thread_lower, thread_lower], facecolor=colors[self.kernel], alpha=0.25, hatch=hatches[self.kernel],edgecolor=colors[self.kernel],linewidth=1.0)
+        ax.fill_between([self.start, self.end], [thread_upper, thread_upper], [thread_lower, thread_lower], facecolor=colors[self.kernel], alpha=0.4, hatch=hatches[self.kernel],edgecolor='k',linewidth=1.0)
         
         ax.text(self.start+(self.end-self.start)/2,thread_lower+(thread_upper-thread_lower)/2,"K: "+str(self.kernel)+":"+str(self.id))
 
@@ -166,13 +166,13 @@ def drawScenario(filename, title):
     kernelTimes= data['kerneltimes']
     smids      = data['smid']
 
-    blockTimes = [float(i)*1e-9 for i in blockTimes]
+    blockTimes = [float(i) for i in blockTimes]
     kernelTimes = [float(i) for i in kernelTimes]
     smids = [int(i) for i in smids]
 
     minTime = min(blockTimes)
     maxTime = max(blockTimes)
-    blockTimes= [i-minTime for i in blockTimes]
+    blockTimes= [(i-minTime)*1e-9 for i in blockTimes]
 
     agg_sm = assignBlocksToSM(nofKernel, nofBlocks, nofThreads, blockTimes, smids, nofRep)
     adjustThreadOffset(agg_sm)
@@ -187,6 +187,9 @@ if __name__ == "__main__":
             "512 threads, 1 blocks, 1 kernel",
             "512 threads, 1 blocks, 2 kernel",
             "1024 threads, 1 blocks, 1 kernel",
+            "PREM: ni,nj = 1026x1022, 512 threads, 2 blocks, 4 kernel",
+            "Legacy: ni,nj = 1026x1022, 512 threads, 2 blocks, 4 kernel",
+    #         " TEST"
             ]
 
     filenames = [
@@ -196,6 +199,9 @@ if __name__ == "__main__":
                 "data-legacy/512t-1b-1k-4096.json",
                 "data-legacy/512t-1b-2k-4096.json",
                 "data-legacy/1024t-1b-1k-4096.json",
+                "prem-leg-comp/512t-2b-4k-1024-prem.json",
+                "prem-leg-comp/512t-2b-4k-1024-legacy.json",
+    #             "out/data.json"
                 ]
     for title, filename in zip(titles, filenames):
         drawScenario(filename, title)

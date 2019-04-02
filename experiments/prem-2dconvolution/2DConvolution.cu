@@ -269,7 +269,6 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
             }
 #endif
 
-
         }
     }
 
@@ -385,6 +384,7 @@ int initializeTest(param_t *params){
         return  -1;
     }
 #endif
+
     // Fill kernel_data structures
     for(int i = 0; i< params->nofKernels; i++){
         cudaStreamCreate(&kernelData[i].stream);
@@ -487,10 +487,18 @@ int runTest(param_t *params){
             cudaEventRecord(kernelData[kernel].start, 
                     kernelData[kernel].stream);
 
-            convolution2D_kernelPREM<<<params->nofBlocks,\
-                params->nofThreads,\
-                0,\
-                kernelData[kernel].stream>>>(kernelData[kernel]);
+            if(params->usePREM){
+                convolution2D_kernelPREM<<<params->nofBlocks,\
+                    params->nofThreads,\
+                    0,\
+                    kernelData[kernel].stream>>>(kernelData[kernel]);
+            }else{
+                convolution2D_kernelLegacy<<<params->nofBlocks,\
+                    params->nofThreads,\
+                    0,\
+                    kernelData[kernel].stream>>>(kernelData[kernel]);
+
+            }
 
             cudaEventRecord(kernelData[kernel].stop,
                     kernelData[kernel].stream);

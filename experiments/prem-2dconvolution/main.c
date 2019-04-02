@@ -208,13 +208,13 @@ static int initThreads(param_t *params)
 
 static void PrintUsage(const char *name) {
     printf("Usage: %s <#threads> <#blocks> <# kernel> <# of intervals> "
-            "<ni> <nj> <interference method (0rnd or 1seq)"
+            "<ni> <nj> <interference method (0rnd or 1seq) <usePREM 1/0>"
             "<output JSON file name>\n", name);
 }
 
 int main(int argc, char **argv) {
 
-    if (argc != 9) {
+    if (argc != 10) {
         PrintUsage(argv[0]);
         return 1;
     }
@@ -269,12 +269,18 @@ int main(int argc, char **argv) {
         printf("Interference method must be 0,1 or 2. Got %s\n", argv[7]);
         return EXIT_FAILURE;
     }
+    
+    params.usePREM = atoi(argv[8]);
+    if (params.usePREM < 0 || params.usePREM > 1) {
+        printf("Specify if Premized or legacy kernel should be used (1 or 0). Got %s\n", argv[7]);
+        return EXIT_FAILURE;
+    }
 
 
     params.nof_repetitions = nof_repetitions;
 
     params.fd = NULL;
-    params.fd = fopen(argv[8],"w");
+    params.fd = fopen(argv[9],"w");
     if (params.fd == NULL) {
         perror("Error opening output file:");
         return EXIT_FAILURE;

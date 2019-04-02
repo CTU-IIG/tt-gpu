@@ -4,13 +4,14 @@
 extern "C" {
 #endif
 
-#define USE_PREM_PROF
+//#define USE_PREM_PROF
 
 typedef struct {
     int nofThreads;
     int nofBlocks;
     int nofKernels;
     int32_t nof_repetitions;
+    int usePREM;
     int ni;
     int nj;
     float *BCPU;
