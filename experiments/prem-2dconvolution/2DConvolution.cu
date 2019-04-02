@@ -50,8 +50,6 @@ static float absVal(float a)
 	}
 }
 
-
-
 static float percentDiff(double val1, double val2)
 {
 	if ((absVal(val1) < 0.01) && (absVal(val2) < 0.01))
@@ -153,14 +151,100 @@ static __device__ __inline__ unsigned int get_smid(void)
     asm("mov.u32 %0, %%smid;":"=r"(ret) );
     return ret;
 }
+//#define PREM_SHM_SIZE (32768/(2*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4 nj=1024 inputdata: 4096x4090 
+#define PREM_SHM_SIZE (32768/(4*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4, nj=512 inputdata: 4098 4082, 1026x1022
+#define PREM_NJ_TILE_SIZE ()
+#define PREM_NI_TILE_SIZE ()
 
-#define PREM_THREADS_SHARED 128
-#define PREM_BLOCKS_SHARED 1
-#define PREM_TILE_X_Q 8
-#define PREM_TILE_Y_Q 256
-#define PREM_TILE_X_S 256
-#define PREM_TILE_Y_S 8
-static __global__ void convolution2D_kernel(kernel_data_t data)
+// Premification for datasets of size 512x512, 1024x1024 and 4096x4090
+static __global__ void convolution2D_kernelPREM(kernel_data_t data)
+{
+    __shared__ float A_SHM[PREM_SHM_SIZE];
+    __shared__ float B_SHM[PREM_SHM_SIZE];
+    int prefetch = 0;
+    int writeback = 0;
+
+    uint64_t start_time = getTime();
+    if(threadIdx.x == 0){
+        data.targetTimes[blockIdx.x*2] = start_time;
+        data.smid[blockIdx.x] = get_smid();
+        printf("Block %d start\n",blockIdx.x);
+    }
+    __syncthreads();
+
+    float *A = data.A;
+    float *B = data.B;
+
+    int ni = data.ni;
+    int nj = data.nj;
+
+    int ni_tile_size = 4;
+    int nj_tile_size = PREM_SHM_SIZE/ni_tile_size;
+
+    float c11, c12, c13, c21, c22, c23, c31, c32, c33;
+
+    c11 = +0.2;  c21 = +0.5;  c31 = -0.8;
+    c12 = -0.3;  c22 = +0.6;  c32 = -0.9;
+    c13 = +0.4;  c23 = +0.7;  c33 = +0.10;
+    
+    for(int niTile = blockIdx.y; niTile <= ni-4; niTile += 2){
+        for(int njTile = blockIdx.x*(nj_tile_size-2); njTile <= nj-nj_tile_size; njTile += (nj_tile_size-2)*gridDim.x){
+            
+            if(threadIdx.x == 0){
+                prefetch++;
+                //printf("Block %d niTile: %d, njTile: %d\n",blockIdx.x, niTile, njTile);
+            }
+            
+            // Prefetch data
+            for (int i = threadIdx.y; (i < ni_tile_size) && (i + niTile < ni); i += blockDim.y){
+                for (int j = threadIdx.x; (j < nj_tile_size) && (j + njTile < nj); j += blockDim.x) {
+                                A_SHM[i * nj_tile_size + j] = A[(i+niTile)*nj + (j+njTile)];
+                }
+            }
+
+            __syncthreads();
+            // Compute on SHM
+            for (int i = threadIdx.y+1; i < ni_tile_size-1; i += blockDim.y){
+                for (int j = threadIdx.x+1; j < nj_tile_size-1; j += blockDim.x) {
+                                B_SHM[i * nj_tile_size + j] = c11 * A_SHM[(i - 1) * nj_tile_size + (j - 1)] + 
+                                                              c21 * A_SHM[(i - 1) * nj_tile_size + (j + 0)] + 
+                                                              c31 * A_SHM[(i - 1) * nj_tile_size + (j + 1)] + 
+                                                              c12 * A_SHM[(i + 0) * nj_tile_size + (j - 1)] + 
+                                                              c22 * A_SHM[(i + 0) * nj_tile_size + (j + 0)] + 
+                                                              c32 * A_SHM[(i + 0) * nj_tile_size + (j + 1)] + 
+                                                              c13 * A_SHM[(i + 1) * nj_tile_size + (j - 1)] + 
+                                                              c23 * A_SHM[(i + 1) * nj_tile_size + (j + 0)] + 
+                                                              c33 * A_SHM[(i + 1) * nj_tile_size + (j + 1)];
+
+                }
+            }
+
+            if(threadIdx.x == 0){
+                writeback++;
+            }
+            __syncthreads();
+            // Write back data
+            for (int i = threadIdx.y+1; (i < ni_tile_size-1) && (i + niTile < ni-1); i += blockDim.y){
+                for (int j = threadIdx.x+1; (j < nj_tile_size-1) && (j + njTile < nj-1); j += blockDim.x) {
+                                B[(i+niTile) * nj + (j+njTile)] = B_SHM[i*nj_tile_size + j];
+
+                }
+            }
+
+            __syncthreads();
+
+        }
+    }
+
+    __syncthreads();
+    if(threadIdx.x == 0){
+        data.targetTimes[blockIdx.x*2+1] = getTime();
+        printf("Block %d end, prefetchcount: %d, writebackcount: %d\n",blockIdx.x, prefetch, writeback);
+    }
+}
+
+
+static __global__ void convolution2D_kernelLegacy(kernel_data_t data)
 {
     uint64_t start_time = getTime();
     if(threadIdx.x == 0){
@@ -180,6 +264,7 @@ static __global__ void convolution2D_kernel(kernel_data_t data)
     c11 = +0.2;  c21 = +0.5;  c31 = -0.8;
     c12 = -0.3;  c22 = +0.6;  c32 = -0.9;
     c13 = +0.4;  c23 = +0.7;  c33 = +0.10;
+
 	for (int i = blockIdx.y * blockDim.y + threadIdx.y+1; i < ni-1; i += blockDim.y * gridDim.y){
 		for (int j = blockIdx.x * blockDim.x + threadIdx.x+1; j < nj-1; j += blockDim.x * gridDim.x) {
                         B[i * nj + j] =  c11 * A[(i - 1) * nj + (j - 1)] + 
@@ -194,34 +279,6 @@ static __global__ void convolution2D_kernel(kernel_data_t data)
 
 		}
 	}
-#if 0
-    for(int ty = 0; ty < PREM_TILE_Y_Q; ty++){
-        for(int tx = 0; tx < PREM_TILE_X_Q/PREM_BLOCKS_SHARED; tx++){
-            int offset_x = tx * PREM_TILE_X_S + blockIdx.x * nj / PREM_BLOCKS_SHARED;
-            int offset_y = ty * PREM_TILE_Y_S;
-            for(int ii = 0; ii < PREM_TILE_Y_S; ii++)
-            {
-                int i = offset_y + ii;
-                for(int jj = 0; jj < PREM_TILE_X_S; jj += PREM_THREADS_SHARED){
-                    int j = offset_x + jj + threadIdx.x;
-                    if ((i < ni-1) && (j < nj-1) && (i > 0) && (j > 0))
-                    {
-                        B[i * nj + j] =  c11 * A[(i - 1) * nj + (j - 1)] + 
-                            c21 * A[(i - 1) * nj + (j + 0)] + 
-                            c31 * A[(i - 1) * nj + (j + 1)] + 
-                            c12 * A[(i + 0) * nj + (j - 1)] + 
-                            c22 * A[(i + 0) * nj + (j + 0)] + 
-                            c32 * A[(i + 0) * nj + (j + 1)] + 
-                            c13 * A[(i + 1) * nj + (j - 1)] + 
-                            c23 * A[(i + 1) * nj + (j + 0)] + 
-                            c33 * A[(i + 1) * nj + (j + 1)];
-                    }
-                }
-            }
-        }
-    }
-#endif
-
     __syncthreads();
     if(threadIdx.x == 0){
         data.targetTimes[blockIdx.x*2+1] = getTime();
@@ -250,6 +307,7 @@ int initializeTest(param_t *params){
     }
     initA(params->ni, params->nj, A);
 	conv2DCPU(params->ni, params->nj, A, B);
+    //memcpy(B, A, params->ni*params->nj*sizeof(float));
 	params->BCPU = B;
 
 	params->BGPU=NULL;
@@ -359,7 +417,7 @@ int runTest(param_t *params){
             cudaEventRecord(kernelData[kernel].start, 
                     kernelData[kernel].stream);
 
-            convolution2D_kernel<<<params->nofBlocks,\
+            convolution2D_kernelPREM<<<params->nofBlocks,\
                 params->nofThreads,\
                 0,\
                 kernelData[kernel].stream>>>(kernelData[kernel]);
