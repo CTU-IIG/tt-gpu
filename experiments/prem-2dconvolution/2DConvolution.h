@@ -4,6 +4,8 @@
 extern "C" {
 #endif
 
+#define USE_PREM_PROF
+
 typedef struct {
     int nofThreads;
     int nofBlocks;
@@ -20,6 +22,12 @@ typedef struct {
     uint64_t hostMeasOH;
     void * kernelData;
     FILE *fd;
+#ifdef USE_PREM_PROF
+    int tileCount;
+    uint64_t *prefetchTimes;
+    uint64_t *computeTimes;
+    uint64_t *writebackTimes;
+#endif
 } param_t;
 
 int initializeTest(param_t *params);

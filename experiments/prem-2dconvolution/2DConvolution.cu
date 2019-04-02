@@ -8,13 +8,19 @@
 #include "2DConvolution.h"
 
 #define DEVICE_NUMBER (0)
-
+#define TIME_PADDING (1536)
 typedef struct {
     float *A;
     float *B;
     int ni;
     int nj;
     uint64_t *targetTimes;
+#ifdef USE_PREM_PROF
+    int *tileCount;
+    uint64_t *prefetchTimes;
+    uint64_t *computeTimes;
+    uint64_t *writebackTimes;
+#endif
     unsigned int *smid;
     cudaStream_t stream;
     cudaEvent_t start;
@@ -161,14 +167,18 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
 {
     __shared__ float A_SHM[PREM_SHM_SIZE];
     __shared__ float B_SHM[PREM_SHM_SIZE];
-    int prefetch = 0;
-    int writeback = 0;
+
+#ifdef USE_PREM_PROF
+    uint64_t prefetchtime  = 0;
+    uint64_t computetime   = 0;
+    int tileCount = 0;
+    uint64_t stamp1, stamp2;
+#endif
 
     uint64_t start_time = getTime();
     if(threadIdx.x == 0){
         data.targetTimes[blockIdx.x*2] = start_time;
         data.smid[blockIdx.x] = get_smid();
-        printf("Block %d start\n",blockIdx.x);
     }
     __syncthreads();
 
@@ -190,20 +200,30 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     for(int niTile = blockIdx.y; niTile <= ni-4; niTile += 2){
         for(int njTile = blockIdx.x*(nj_tile_size-2); njTile <= nj-nj_tile_size; njTile += (nj_tile_size-2)*gridDim.x){
             
+            /* ---------------------------------- */
+               //Prefetch data
+            /* ---------------------------------- */
+#ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-                prefetch++;
-                //printf("Block %d niTile: %d, njTile: %d\n",blockIdx.x, niTile, njTile);
+               stamp1 = getTime(); 
             }
-            
-            // Prefetch data
+#endif
+
             for (int i = threadIdx.y; (i < ni_tile_size) && (i + niTile < ni); i += blockDim.y){
                 for (int j = threadIdx.x; (j < nj_tile_size) && (j + njTile < nj); j += blockDim.x) {
                                 A_SHM[i * nj_tile_size + j] = A[(i+niTile)*nj + (j+njTile)];
                 }
             }
-
             __syncthreads();
+#ifdef USE_PREM_PROF
+            if(threadIdx.x == 0){
+               stamp2 = getTime();
+               prefetchtime = stamp2-stamp1;
+            }
+#endif
+            /* ---------------------------------- */
             // Compute on SHM
+            /* ---------------------------------- */
             for (int i = threadIdx.y+1; i < ni_tile_size-1; i += blockDim.y){
                 for (int j = threadIdx.x+1; j < nj_tile_size-1; j += blockDim.x) {
                                 B_SHM[i * nj_tile_size + j] = c11 * A_SHM[(i - 1) * nj_tile_size + (j - 1)] + 
@@ -219,19 +239,36 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
                 }
             }
 
-            if(threadIdx.x == 0){
-                writeback++;
-            }
             __syncthreads();
+#ifdef USE_PREM_PROF
+            if(threadIdx.x == 0){
+               stamp1 = getTime();
+               computetime = stamp1 - stamp2;
+            }
+#endif
+
+            /* ---------------------------------- */
             // Write back data
+            /* ---------------------------------- */
             for (int i = threadIdx.y+1; (i < ni_tile_size-1) && (i + niTile < ni-1); i += blockDim.y){
                 for (int j = threadIdx.x+1; (j < nj_tile_size-1) && (j + njTile < nj-1); j += blockDim.x) {
                                 B[(i+niTile) * nj + (j+njTile)] = B_SHM[i*nj_tile_size + j];
 
                 }
             }
-
             __syncthreads();
+
+#ifdef USE_PREM_PROF
+            if(threadIdx.x == 0){
+               stamp2= getTime();
+               // Write times to global memory
+               data.prefetchTimes[blockIdx.x*TIME_PADDING+tileCount] = prefetchtime;
+               data.computeTimes[blockIdx.x*TIME_PADDING+tileCount] = computetime;
+               data.writebackTimes[blockIdx.x*TIME_PADDING+tileCount] = stamp2-stamp1;
+               tileCount++;
+            }
+#endif
+
 
         }
     }
@@ -239,7 +276,9 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     __syncthreads();
     if(threadIdx.x == 0){
         data.targetTimes[blockIdx.x*2+1] = getTime();
-        printf("Block %d end, prefetchcount: %d, writebackcount: %d\n",blockIdx.x, prefetch, writeback);
+#ifdef USE_PREM_PROF
+        *data.tileCount = tileCount;
+#endif
     }
 }
 
@@ -326,6 +365,26 @@ int initializeTest(param_t *params){
     }
     memset(kernelData, 0, params->nofKernels*sizeof(kernel_data_t));
 
+#ifdef USE_PREM_PROF
+	params->prefetchTimes=NULL;
+    params->prefetchTimes = (uint64_t *) malloc(params->nofKernels * params->nofBlocks * TIME_PADDING *sizeof(uint64_t));
+    if (!params->prefetchTimes) {
+        perror("Failed allocating prefetch times on host: ");
+        return  -1;
+    }
+	params->computeTimes=NULL;
+    params->computeTimes = (uint64_t *) malloc(params->nofKernels * params->nofBlocks * TIME_PADDING *sizeof(uint64_t));
+    if (!params->computeTimes) {
+        perror("Failed allocating prefetch times on host: ");
+        return  -1;
+    }
+	params->writebackTimes=NULL;
+    params->writebackTimes = (uint64_t *) malloc(params->nofKernels * params->nofBlocks * TIME_PADDING *sizeof(uint64_t));
+    if (!params->writebackTimes) {
+        perror("Failed allocating prefetch times on host: ");
+        return  -1;
+    }
+#endif
     // Fill kernel_data structures
     for(int i = 0; i< params->nofKernels; i++){
         cudaStreamCreate(&kernelData[i].stream);
@@ -349,13 +408,24 @@ int initializeTest(param_t *params){
         if (CheckCUDAError(cudaMalloc(&kernelData[i].smid, \
                         params->nofBlocks*sizeof(unsigned int)))) return -1;
 
+#ifdef USE_PREM_PROF
+        // Allocate PREM profiling data
+        if (CheckCUDAError(cudaMalloc(&kernelData[i].prefetchTimes , \
+                        params->nofBlocks * TIME_PADDING *sizeof(uint64_t)))) return -1;    
+        if (CheckCUDAError(cudaMalloc(&kernelData[i].computeTimes , \
+                        params->nofBlocks * TIME_PADDING *sizeof(uint64_t)))) return -1;    
+        if (CheckCUDAError(cudaMalloc(&kernelData[i].writebackTimes , \
+                        params->nofBlocks * TIME_PADDING *sizeof(uint64_t)))) return -1;    
+        if (CheckCUDAError(cudaMalloc(&kernelData[i].tileCount , \
+                        sizeof(int)))) return -1;    
+#endif
+
         kernelData[i].ni = params->ni;
         kernelData[i].nj = params->nj;
         cudaEventCreate(&kernelData[i].start);
         cudaEventCreate(&kernelData[i].stop);
 
     }
-
 
     //allocate host times
     params->blockTimes = NULL;
@@ -463,6 +533,24 @@ int runTest(param_t *params){
                                 kernelData[kernel].smid, \
                                 params->nofBlocks*sizeof(unsigned int), \
                                 cudaMemcpyDeviceToHost))) return -1;
+#ifdef USE_PREM_PROF
+                if (CheckCUDAError(cudaMemcpy(&params->tileCount, \
+                                kernelData[kernel].tileCount, \
+                                sizeof(int), \
+                                cudaMemcpyDeviceToHost))) return -1;
+                if (CheckCUDAError(cudaMemcpy(&params->prefetchTimes[params->nofBlocks*TIME_PADDING*kernel], \
+                                kernelData[kernel].prefetchTimes, \
+                                params->nofBlocks*TIME_PADDING*sizeof(uint64_t), \
+                                cudaMemcpyDeviceToHost))) return -1;
+                if (CheckCUDAError(cudaMemcpy(&params->computeTimes[params->nofBlocks*TIME_PADDING*kernel], \
+                                kernelData[kernel].computeTimes, \
+                                params->nofBlocks*TIME_PADDING*sizeof(uint64_t), \
+                                cudaMemcpyDeviceToHost))) return -1;
+                if (CheckCUDAError(cudaMemcpy(&params->writebackTimes[params->nofBlocks*TIME_PADDING*kernel], \
+                                kernelData[kernel].writebackTimes, \
+                                params->nofBlocks*TIME_PADDING*sizeof(uint64_t), \
+                                cudaMemcpyDeviceToHost))) return -1;
+#endif
             }
         }
     }
@@ -486,6 +574,33 @@ int writeResults(param_t *params){
     if (fprintf(params->fd,"\"measOH\": \"%lu\",\n", params->hostMeasOH)  < 0 ) return -1;
 
     // Write times
+#ifdef USE_PREM_PROF
+    if (fprintf(params->fd,"\"tileCount\": \"%u\",\n", params->tileCount)  < 0 ) return -1;
+
+    if (fprintf(params->fd,"\"prefetchtimes\":[\n") < 0 ) return -1;
+    for(int j = 0; j< params->nofKernels*params->nofBlocks; j++){
+        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+params->tileCount; i++){
+            if (fprintf(params->fd,"\"%lu\",\n",params->prefetchTimes[i]) < 0 ) return -1;
+        }
+    }
+    if (fprintf(params->fd,"\"%lu\"],\n", params->prefetchTimes[0]) < 0 ) return -1;
+
+    if (fprintf(params->fd,"\"computetimes\":[\n") < 0 ) return -1;
+    for(int j = 0; j< params->nofKernels*params->nofBlocks; j++){
+        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+params->tileCount; i++){
+            if (fprintf(params->fd,"\"%lu\",\n",params->computeTimes[i]) < 0 ) return -1;
+        }
+    }
+    if (fprintf(params->fd,"\"%lu\"],\n", params->computeTimes[0]) < 0 ) return -1;
+
+    if (fprintf(params->fd,"\"writebacktimes\":[\n") < 0 ) return -1;
+    for(int j = 0; j< params->nofKernels*params->nofBlocks; j++){
+        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+params->tileCount; i++){
+            if (fprintf(params->fd,"\"%lu\",\n",params->writebackTimes[i]) < 0 ) return -1;
+        }
+    }
+    if (fprintf(params->fd,"\"%lu\"],\n", params->writebackTimes[0]) < 0 ) return -1;
+#endif
     int size_time = params->nofKernels * 2*params->nofBlocks * params->nof_repetitions;
 
     if (fprintf(params->fd,"\"blocktimes\":[\n") < 0 ) return -1;
@@ -523,12 +638,23 @@ int cleanUp(param_t *params){
         if(kernelData->B != NULL) cudaFree(kernelData->B);
         if(kernelData->targetTimes != NULL) cudaFree(kernelData->targetTimes);
         if(kernelData->smid != NULL) cudaFree(kernelData->smid);
+#ifdef USE_PREM_PROF
+        if(kernelData->tileCount != NULL) cudaFree(kernelData->tileCount);
+        if(kernelData->prefetchTimes != NULL) cudaFree(kernelData->prefetchTimes);
+        if(kernelData->computeTimes != NULL) cudaFree(kernelData->computeTimes);
+        if(kernelData->writebackTimes != NULL) cudaFree(kernelData->writebackTimes);
+#endif
     }
 
     // Free target buffers
     if(params->targetMeasOH != NULL) cudaFree(params->targetMeasOH);
 
     // Free host buffers
+#ifdef USE_PREM_PROF
+        if(params->prefetchTimes != NULL)  free(params->prefetchTimes);
+        if(params->computeTimes != NULL)   free(params->computeTimes);
+        if(params->writebackTimes != NULL) free(params->writebackTimes);
+#endif
     if(params->kernelTimes != NULL) free(params->kernelTimes);
     if(params->blockTimes != NULL) free(params->blockTimes);
     if(params->BCPU != NULL) free(params->BCPU);
