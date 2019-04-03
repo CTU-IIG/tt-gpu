@@ -16,7 +16,7 @@ typedef struct {
     int nj;
     float *BCPU;
     float *BGPU;
-    float *kernelTimes;
+    double *kernelTimes;
     uint64_t *blockTimes;
     unsigned int *smid;
     uint64_t *targetMeasOH;

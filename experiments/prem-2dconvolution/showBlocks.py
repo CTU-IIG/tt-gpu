@@ -189,6 +189,7 @@ if __name__ == "__main__":
             "1024 threads, 1 blocks, 1 kernel",
             "PREM: ni,nj = 1026x1022, 512 threads, 2 blocks, 4 kernel",
             "Legacy: ni,nj = 1026x1022, 512 threads, 2 blocks, 4 kernel",
+            "PREM barrier: ni,nj = 1026x1022, 512 threads, 2 blocks, 4 kernel",
     #         " TEST"
             ]
 
@@ -201,6 +202,7 @@ if __name__ == "__main__":
                 "data-legacy/1024t-1b-1k-4096.json",
                 "prem-leg-comp/512t-2b-4k-1024-prem.json",
                 "prem-leg-comp/512t-2b-4k-1024-legacy.json",
+                "prem-barrier/512t-2b-4k-1024-prem.json",
     #             "out/data.json"
                 ]
     for title, filename in zip(titles, filenames):

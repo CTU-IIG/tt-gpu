@@ -13,7 +13,7 @@ inter = "2" # 0 = rnd, 1= seq
 
 #./2DConvolution <#threads> <#blocks> <# kernel> <# of intervals> <ni> <nj> <interference method (0rnd or 1seq) <usePREM> <output JSON file name>
 scenarios = [# Filename                thread   block   kernel     ni      nj   usePREM  repetition
-#             ("1024t-1b-1k-1024-legacy.json",  1024,     1,     1,      1026,    1022,   0,       100),
+             ("1024t-1b-1k-1024-legacy.json",  1024,     1,     1,      1026,    1022,   0,       100),
              ("512t-1b-1k-1024-legacy.json",    512,     1,     1,      1026,    1022,   0,       100),
              ("512t-1b-2k-1024-legacy.json",    512,     1,     2,      1026,    1022,   0,       100),
              ("512t-2b-1k-1024-legacy.json",    512,     2,     1,      1026,    1022,   0,       100),

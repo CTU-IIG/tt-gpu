@@ -47,9 +47,10 @@ def showTimesAll(filenames, titles):
         phases.append([int(i) for i in computetimes])
         phases.append([int(i) for i in writebacktimes])
 
+        prefetchtimes.sort()
+        print(prefetchtimes)
+
         labels = ['prefetch', 'compute', 'writeback']
-
-
 
         fig = plt.figure()
         fig.suptitle("PREM phases - " + title)
@@ -59,22 +60,25 @@ def showTimesAll(filenames, titles):
 
 if __name__ == "__main__":
     titles1 = [
-            "512 threads, 1 blocks, 1 kernel",
-            ]
-    titles2 = [
-            "512 threads, 2 blocks, 1 kernel",
+            "Without warm-up 512 threads, 1 blocks, 1 kernel",
+            "Without warm-up 512 threads, 2 blocks, 1 kernel",
+            "With warm-up 512 threads, 1 blocks, 1 kernel",
+            "With warm-up 512 threads, 2 blocks, 1 kernel",
+            "With warm-up 512 threads, 1 blocks, 2 kernel",
+            "With warm-up 512 threads, 1 blocks, 4 kernel",
             ]
 
     filenames1 = [
                 "phases/prem-prof-1-block.json",
-                ]
-    filenames2 = [
                 "phases/prem-prof-2-block.json",
+                "phases/prem-prof-1-block-warmup.json",
+                "phases/prem-prof-2-block-warmup.json",
+                "phases/prem-prof-1-block-2-kernel-warmup.json",
+                "phases/prem-prof-1-block-4-kernel-warmup.json",
                 ]
 
     #for title, filename in zip(titles, filenames):
     #    showTimesKernel(filename, title)
 
-    showTimesAll(filenames1, titles2)
-    showTimesAll(filenames2, titles2)
+    showTimesAll(filenames1, titles1)
     plt.show()

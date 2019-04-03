@@ -1,3 +1,6 @@
+#include <err.h>
+#include <sched.h>
+#include <pthread.h>
 #include <error.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -34,8 +37,8 @@ typedef struct {
 #endif
     unsigned int *smid;
     cudaStream_t stream;
-    cudaEvent_t start;
-    cudaEvent_t stop;
+    double *start;
+    double *stop;
 #ifdef USE_BARRIER
     barrier_t barrier;
 #endif
@@ -56,6 +59,15 @@ static int InternalCheckCUDAError(cudaError_t result, const char *fn,
 
 //define a small float value
 #define SMALL_FLOAT_VAL 0.00000001f
+
+static double hostTimeMs(void) {
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+    printf("Error getting time.\n");
+    exit(1);
+  }
+  return (((double) ts.tv_sec)*1e3) + (((double) ts.tv_nsec) / 1e6);
+}
 
 
 static float absVal(float a)
@@ -191,10 +203,22 @@ static __device__ __inline__ unsigned int get_smid(void)
     asm("mov.u32 %0, %%smid;":"=r"(ret) );
     return ret;
 }
+
+
+static __device__ __inline__ void syncPrefetch(int tileId, int kernelId)
+{
+    if(tileId == 0){
+        return;
+    }
+    if(threadIdx.x == 0){
+
+    }
+}
+
 //#define PREM_SHM_SIZE (32768/(2*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4 nj=1024 inputdata: 4096x4090 
 #define PREM_SHM_SIZE (32768/(4*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4, nj=512 inputdata: 4098 4082, 1026x1022
-#define PREM_NJ_TILE_SIZE ()
-#define PREM_NI_TILE_SIZE ()
+#define PREM_NI_TILE_SIZE (4)
+#define PREM_NJ_OVERLAP (2)
 
 // Premification for datasets of size 512x512, 1024x1024 and 4096x4090
 static __global__ void convolution2D_kernelPREM(kernel_data_t data)
@@ -226,7 +250,7 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     int ni = data.ni;
     int nj = data.nj;
 
-    int ni_tile_size = 4;
+    int ni_tile_size = PREM_NI_TILE_SIZE;
     int nj_tile_size = PREM_SHM_SIZE/ni_tile_size;
 
     float c11, c12, c13, c21, c22, c23, c31, c32, c33;
@@ -235,8 +259,8 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     c12 = -0.3;  c22 = +0.6;  c32 = -0.9;
     c13 = +0.4;  c23 = +0.7;  c33 = +0.10;
     
-    for(int niTile = blockIdx.y; niTile <= ni-4; niTile += 2){
-        for(int njTile = blockIdx.x*(nj_tile_size-2); njTile <= nj-nj_tile_size; njTile += (nj_tile_size-2)*gridDim.x){
+    for(int niTile = blockIdx.y; niTile <= ni-PREM_NI_TILE_SIZE; niTile += (PREM_NI_TILE_SIZE/2)){
+        for(int njTile = blockIdx.x*(nj_tile_size-PREM_NJ_OVERLAP); njTile <= nj-nj_tile_size; njTile += (nj_tile_size-PREM_NJ_OVERLAP)*gridDim.x){
             
 #ifdef USE_BARRIER
             if(threadIdx.x == 0){
@@ -388,7 +412,6 @@ int initializeTest(param_t *params){
     }
     initA(params->ni, params->nj, A);
 	conv2DCPU(params->ni, params->nj, A, B);
-    //memcpy(B, A, params->ni*params->nj*sizeof(float));
 	params->BCPU = B;
 
 	params->BGPU=NULL;
@@ -460,6 +483,20 @@ int initializeTest(param_t *params){
         if (CheckCUDAError(cudaMalloc(&kernelData[i].smid, \
                         params->nofBlocks*sizeof(unsigned int)))) return -1;
 
+        // Allocate start stop times
+        kernelData[i].start=NULL;
+        kernelData[i].start = (double *) malloc(sizeof(double));
+        if (!kernelData[i].start) {
+            perror("Failed allocating kernel start times on host: ");
+            return  -1;
+        }
+        kernelData[i].stop=NULL;
+        kernelData[i].stop = (double *) malloc(sizeof(double));
+        if (!kernelData[i].stop) {
+            perror("Failed allocating kernel stop times on host: ");
+            return  -1;
+        }
+
 #ifdef USE_PREM_PROF
         // Allocate PREM profiling data
         if (CheckCUDAError(cudaMalloc(&kernelData[i].prefetchTimes , \
@@ -479,8 +516,6 @@ int initializeTest(param_t *params){
 
         kernelData[i].ni = params->ni;
         kernelData[i].nj = params->nj;
-        cudaEventCreate(&kernelData[i].start);
-        cudaEventCreate(&kernelData[i].stop);
 
     }
 
@@ -495,7 +530,7 @@ int initializeTest(param_t *params){
 
     // allocate host kernel times for cuda events
     params->kernelTimes = NULL;
-    params->kernelTimes = (float *) malloc(params->nofKernels*params->nof_repetitions*sizeof(float));
+    params->kernelTimes = (double *) malloc(params->nofKernels*params->nof_repetitions*sizeof(double));
     if (!params->kernelTimes) {
         perror("Failed allocating kernelTimes buffer: ");
         return  -1;
@@ -534,45 +569,78 @@ int initializeTest(param_t *params){
     return 0;
 }
 
+
+typedef struct{
+    int cpu;
+    int nofBlocks;
+    int nofThreads;
+    int usePrem;
+    kernel_data_t kernelData;
+} thread_data_t;
+
+static pthread_barrier_t barrier;
+static void *executeKernel(void * ptr){
+    thread_data_t *threadData = (thread_data_t*)ptr;
+    kernel_data_t kernelData = threadData->kernelData;
+    int nofThreads = threadData->nofThreads;
+    int nofBlocks = threadData->nofBlocks;  
+
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET(threadData->cpu, &set);
+    if (sched_setaffinity(0, sizeof(set), &set) < 0)
+        err(1, "sched_setaffinity");
+
+    pthread_barrier_wait(&barrier);
+    *threadData->kernelData.start = hostTimeMs();
+    if(threadData->usePrem){
+        convolution2D_kernelPREM<<<nofBlocks,\
+            nofThreads,\
+            0,\
+            kernelData.stream>>>(kernelData);
+    }else{
+        convolution2D_kernelLegacy<<<nofBlocks,\
+            nofThreads,\
+            0,\
+            kernelData.stream>>>(kernelData);
+
+    }
+    pthread_barrier_wait(&barrier);
+    if (CheckCUDAError(cudaStreamSynchronize(kernelData.stream))) perror("Problem with stream sync");
+    *threadData->kernelData.stop = hostTimeMs();
+
+    return NULL;
+}
+
 int runTest(param_t *params){
 
     kernel_data_t *kernelData = (kernel_data_t*)params->kernelData;
 
-    for(int rep = -32; rep < params->nof_repetitions; rep++){
+    thread_data_t threadData[params->nofKernels];
 
+	pthread_t threads[params->nofKernels];
+
+	int s = pthread_barrier_init(&barrier, NULL, params->nofKernels);
+	if (s != 0)
+		error(1, s, "pthread_barrier_init");
+
+    for(int rep = -1; rep < params->nof_repetitions; rep++){
         for(int kernel = 0; kernel < params->nofKernels; kernel++){
-            cudaEventRecord(kernelData[kernel].start, 
-                    kernelData[kernel].stream);
-
-            if(params->usePREM){
-                convolution2D_kernelPREM<<<params->nofBlocks,\
-                    params->nofThreads,\
-                    0,\
-                    kernelData[kernel].stream>>>(kernelData[kernel]);
-            }else{
-                convolution2D_kernelLegacy<<<params->nofBlocks,\
-                    params->nofThreads,\
-                    0,\
-                    kernelData[kernel].stream>>>(kernelData[kernel]);
-
-            }
-
-            cudaEventRecord(kernelData[kernel].stop,
-                    kernelData[kernel].stream);
-
+            threadData[kernel].cpu=kernel;
+            threadData[kernel].nofThreads=params->nofThreads;
+            threadData[kernel].nofBlocks=params->nofBlocks;
+            threadData[kernel].kernelData = kernelData[kernel];
+            threadData[kernel].usePrem = params->usePREM;
+            pthread_create(&threads[kernel], NULL, executeKernel, (void *)&threadData[kernel]);
         }
 
-
-        // Synchronize with device
-        if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
-
+        for(int kernel = 0; kernel < params->nofKernels; kernel++){
+            pthread_join(threads[kernel], NULL);
+        }
 
         for(int kernel = 0; kernel < params->nofKernels; kernel++){
-            float milliseconds = 0;
-
-            cudaEventElapsedTime(&milliseconds,\
-                    kernelData[kernel].start,\
-                    kernelData[kernel].stop);
+            double milliseconds = 0.0;
+            milliseconds = *kernelData[kernel].stop-*kernelData[kernel].start;
 
 		// Copyback B and check
 
@@ -584,7 +652,7 @@ int runTest(param_t *params){
 			compareResults(params->ni, params->nj, params->BCPU, params->BGPU);
             // Store data if no warm up iteration
             if(rep>=0){
-                printf("Elapsed time of kernel %d: %fms\n",kernel,milliseconds);
+                printf("Elapsed time of kernel %d: %lfms\n",kernel,milliseconds);
                 params->kernelTimes[params->nof_repetitions*kernel+rep]=milliseconds;
 
                 // Copyback times
@@ -677,9 +745,9 @@ int writeResults(param_t *params){
     size_time = params->nofKernels * params->nof_repetitions;
     if (fprintf(params->fd,"\"kerneltimes\":[\n") < 0 ) return -1;
     for (int i = 0; i < size_time-1; i++){
-        if (fprintf(params->fd,"\"%f\",\n",params->kernelTimes[i]) < 0 ) return -1;
+        if (fprintf(params->fd,"\"%lf\",\n",params->kernelTimes[i]) < 0 ) return -1;
     }
-    if (fprintf(params->fd,"\"%f\"],\n", params->kernelTimes[size_time-1]) < 0 ) return -1;
+    if (fprintf(params->fd,"\"%lf\"],\n", params->kernelTimes[size_time-1]) < 0 ) return -1;
 
     size_time = params->nofKernels * params->nofBlocks*params->nof_repetitions;
     if (fprintf(params->fd,"\"smid\":[\n") < 0 ) return -1;
@@ -696,8 +764,6 @@ int cleanUp(param_t *params){
     kernel_data_t *kernelData = (kernel_data_t*)params->kernelData;
 
     for(int kernel = 0; kernel < params->nofKernels; kernel++){
-        cudaEventDestroy(kernelData[kernel].start);
-        cudaEventDestroy(kernelData[kernel].stop);
         cudaStreamDestroy(kernelData[kernel].stream);
         if(kernelData->A != NULL) cudaFree(kernelData->A);
         if(kernelData->B != NULL) cudaFree(kernelData->B);
