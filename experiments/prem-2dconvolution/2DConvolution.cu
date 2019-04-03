@@ -9,6 +9,17 @@
 
 #define DEVICE_NUMBER (0)
 #define TIME_PADDING (1536)
+
+//#define USE_BARRIER
+#ifdef USE_BARRIER
+// membar implementation simmilar to https://bigfoot.cs.unc.edu:3000/otternes/cuda_scheduling_examiner/src/master/src/barrier_wait.c
+typedef struct {
+    int *threadsRemaining;
+    int *sense;
+    int thread_count;
+} barrier_t;
+#endif
+
 typedef struct {
     float *A;
     float *B;
@@ -25,6 +36,9 @@ typedef struct {
     cudaStream_t stream;
     cudaEvent_t start;
     cudaEvent_t stop;
+#ifdef USE_BARRIER
+    barrier_t barrier;
+#endif
 } kernel_data_t;
 
 
@@ -151,6 +165,26 @@ static __global__ void getMeasurementOverhead(param_t data) {
     }
 }
 
+#ifdef USE_BARRIER
+static __device__ inline int barrierWait(barrier_t barrier, int* local_sense) {
+    *local_sense = !(*local_sense);
+    int value = atomicSub(barrier.threadsRemaining, 1);
+
+    if(value==1) {
+
+    atomicExch(barrier.threadsRemaining, barrier.thread_count);
+    *(barrier.sense) = *local_sense;
+    return 1;
+    }
+
+    while (*(barrier.sense) != *local_sense){
+        asm volatile("membar.gl;" : : :);
+        continue;
+    }
+    return 1;
+}
+#endif
+
 static __device__ __inline__ unsigned int get_smid(void)
 {
     unsigned int ret;
@@ -182,6 +216,10 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     }
     __syncthreads();
 
+#ifdef USE_BARRIER
+    int local_sense = 0;
+#endif
+
     float *A = data.A;
     float *B = data.B;
 
@@ -200,6 +238,12 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     for(int niTile = blockIdx.y; niTile <= ni-4; niTile += 2){
         for(int njTile = blockIdx.x*(nj_tile_size-2); njTile <= nj-nj_tile_size; njTile += (nj_tile_size-2)*gridDim.x){
             
+#ifdef USE_BARRIER
+            if(threadIdx.x == 0){
+                barrierWait(data.barrier, &local_sense);
+            }
+            __syncthreads();
+#endif
             /* ---------------------------------- */
                //Prefetch data
             /* ---------------------------------- */
@@ -256,7 +300,6 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
 
                 }
             }
-            __syncthreads();
 
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
@@ -385,6 +428,15 @@ int initializeTest(param_t *params){
     }
 #endif
 
+#ifdef USE_BARRIER
+    int *threadsRemaining; 
+    int *sense;
+    if (CheckCUDAError(cudaHostAlloc(&threadsRemaining, sizeof(int), cudaHostAllocMapped))) return -1;    
+    if (CheckCUDAError(cudaHostAlloc(&sense, sizeof(int), cudaHostAllocMapped))) return -1;    
+    *threadsRemaining=params->nofBlocks*params->nofKernels;
+    *sense = 0;
+#endif
+
     // Fill kernel_data structures
     for(int i = 0; i< params->nofKernels; i++){
         cudaStreamCreate(&kernelData[i].stream);
@@ -418,6 +470,11 @@ int initializeTest(param_t *params){
                         params->nofBlocks * TIME_PADDING *sizeof(uint64_t)))) return -1;    
         if (CheckCUDAError(cudaMalloc(&kernelData[i].tileCount , \
                         sizeof(int)))) return -1;    
+#endif
+#ifdef USE_BARRIER
+        kernelData[i].barrier.threadsRemaining=threadsRemaining;
+        kernelData[i].barrier.sense=sense;
+        kernelData[i].barrier.thread_count = params->nofBlocks*params->nofKernels;
 #endif
 
         kernelData[i].ni = params->ni;
@@ -481,7 +538,7 @@ int runTest(param_t *params){
 
     kernel_data_t *kernelData = (kernel_data_t*)params->kernelData;
 
-    for(int rep = 0; rep < params->nof_repetitions; rep++){
+    for(int rep = -32; rep < params->nof_repetitions; rep++){
 
         for(int kernel = 0; kernel < params->nofKernels; kernel++){
             cudaEventRecord(kernelData[kernel].start, 
@@ -591,7 +648,7 @@ int writeResults(param_t *params){
             if (fprintf(params->fd,"\"%lu\",\n",params->prefetchTimes[i]) < 0 ) return -1;
         }
     }
-    if (fprintf(params->fd,"\"%lu\"],\n", params->prefetchTimes[0]) < 0 ) return -1;
+    if (fprintf(params->fd,"\"%lu\"],\n", params->prefetchTimes[1]) < 0 ) return -1;
 
     if (fprintf(params->fd,"\"computetimes\":[\n") < 0 ) return -1;
     for(int j = 0; j< params->nofKernels*params->nofBlocks; j++){
@@ -599,7 +656,7 @@ int writeResults(param_t *params){
             if (fprintf(params->fd,"\"%lu\",\n",params->computeTimes[i]) < 0 ) return -1;
         }
     }
-    if (fprintf(params->fd,"\"%lu\"],\n", params->computeTimes[0]) < 0 ) return -1;
+    if (fprintf(params->fd,"\"%lu\"],\n", params->computeTimes[1]) < 0 ) return -1;
 
     if (fprintf(params->fd,"\"writebacktimes\":[\n") < 0 ) return -1;
     for(int j = 0; j< params->nofKernels*params->nofBlocks; j++){
@@ -607,7 +664,7 @@ int writeResults(param_t *params){
             if (fprintf(params->fd,"\"%lu\",\n",params->writebackTimes[i]) < 0 ) return -1;
         }
     }
-    if (fprintf(params->fd,"\"%lu\"],\n", params->writebackTimes[0]) < 0 ) return -1;
+    if (fprintf(params->fd,"\"%lu\"],\n", params->writebackTimes[1]) < 0 ) return -1;
 #endif
     int size_time = params->nofKernels * 2*params->nofBlocks * params->nof_repetitions;
 
@@ -651,6 +708,10 @@ int cleanUp(param_t *params){
         if(kernelData->prefetchTimes != NULL) cudaFree(kernelData->prefetchTimes);
         if(kernelData->computeTimes != NULL) cudaFree(kernelData->computeTimes);
         if(kernelData->writebackTimes != NULL) cudaFree(kernelData->writebackTimes);
+#endif
+#ifdef USE_BARRIER
+        if(kernelData->barrier.threadsRemaining != NULL) cudaFree(kernelData->barrier.threadsRemaining);
+        if(kernelData->barrier.sense != NULL) cudaFree(kernelData->barrier.sense);
 #endif
     }
 

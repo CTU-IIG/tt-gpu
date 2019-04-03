@@ -170,7 +170,7 @@ if __name__ == "__main__":
             "Legacy: Legacy: ni,nj = 1024, 1024 threads, 1 blocks, 1 kernel",
             ]
 
-    title13 = [
+    titles3 = [
             "ni,nj = 512, 256 threads, 2 blocks, 4 kernel",
             "ni,nj = 512, 256 threads, 2 blocks, 2 kernel",
             "ni,nj = 512, 256 threads, 2 blocks, 1 kernel",
@@ -193,6 +193,14 @@ if __name__ == "__main__":
             "PREM: ni,nj = 1026x1022, 512 threads, 2 blocks, 1 kernel",
             "PREM: ni,nj = 1026x1022, 512 threads, 1 blocks, 1 kernel",
             "PREM: ni,nj = 1026x1022, 512 threads, 1 blocks, 2 kernel",
+            ]
+
+    titles6 = [
+            "PREM with barrier: ni,nj = 1026x1022, 512 threads, 2 blocks, 4 kernel",
+            "PREM with barrier: ni,nj = 1026x1022, 512 threads, 2 blocks, 2 kernel",
+            "PREM with barrier: ni,nj = 1026x1022, 512 threads, 2 blocks, 1 kernel",
+            "PREM with barrier: ni,nj = 1026x1022, 512 threads, 1 blocks, 1 kernel",
+            "PREM with barrier: ni,nj = 1026x1022, 512 threads, 1 blocks, 2 kernel",
             ]
 
     filenames1 = [
@@ -237,6 +245,13 @@ if __name__ == "__main__":
                 "prem-leg-comp/512t-1b-1k-1024-prem.json",
                 "prem-leg-comp/512t-1b-2k-1024-prem.json",
                 ]
+    filenames6 = [
+                "prem-barrier/512t-2b-4k-1024-prem.json",
+                "prem-barrier/512t-2b-2k-1024-prem.json",
+                "prem-barrier/512t-2b-1k-1024-prem.json",
+                "prem-barrier/512t-1b-1k-1024-prem.json",
+                "prem-barrier/512t-1b-2k-1024-prem.json",
+                ]
     
     #for title, filename in zip(titles, filenames):
     #    showTimesKernel(filename, title)
@@ -246,4 +261,5 @@ if __name__ == "__main__":
     #showTimesAll(filenames3, titles3)
     showTimesAll(filenames4, titles4)
     showTimesAll(filenames5, titles5)
+    showTimesAll(filenames6, titles6)
     plt.show()
