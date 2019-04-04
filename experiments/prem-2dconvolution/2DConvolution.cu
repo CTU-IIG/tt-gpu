@@ -9,18 +9,18 @@
 #include <time.h>
 #include <cuda_runtime.h>
 #include "2DConvolution.h"
+#include "utility_func.h"
 
 #define DEVICE_NUMBER (0)
-#define TIME_PADDING (1536)
+#define START_TIME_OFFSET_NS (1000000000) //10ms
 
 //#define USE_BARRIER
 #ifdef USE_BARRIER
-// membar implementation simmilar to https://bigfoot.cs.unc.edu:3000/otternes/cuda_scheduling_examiner/src/master/src/barrier_wait.c
-typedef struct {
-    int *threadsRemaining;
-    int *sense;
-    int thread_count;
-} barrier_t;
+#include "cuda_barrier.cuh"
+#endif
+
+#ifdef USE_PREM_PROF
+#define TIME_PADDING (1536)
 #endif
 
 typedef struct {
@@ -28,7 +28,9 @@ typedef struct {
     float *B;
     int ni;
     int nj;
+    int kernelId;
     uint64_t *targetTimes;
+    uint64_t *startTime;
 #ifdef USE_PREM_PROF
     int *tileCount;
     uint64_t *prefetchTimes;
@@ -45,175 +47,114 @@ typedef struct {
 } kernel_data_t;
 
 
-// Prints a message and returns zero if the given value is not cudaSuccess
-#define CheckCUDAError(val) (InternalCheckCUDAError((val), #val, __FILE__, __LINE__))
-
-// Called internally by CheckCUDAError
-static int InternalCheckCUDAError(cudaError_t result, const char *fn,
-        const char *file, int line) {
-    if (result == cudaSuccess) return 0;
-    printf("CUDA error %d in %s, line %d (%s): %s\n", (int) result, file, line,
-            fn, cudaGetErrorString(result));
-    return -1;
-}
-
 //define a small float value
 #define SMALL_FLOAT_VAL 0.00000001f
 
-static double hostTimeMs(void) {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-    printf("Error getting time.\n");
-    exit(1);
-  }
-  return (((double) ts.tv_sec)*1e3) + (((double) ts.tv_nsec) / 1e6);
+
+static float absVal(float a){
+    if(a < 0){
+        return (a * -1);
+    }
+    else{ 
+        return a;
+    }
 }
 
+static float percentDiff(double val1, double val2){
+    if ((absVal(val1) < 0.01) && (absVal(val2) < 0.01)){
+        return 0.0f;
+    }
 
-static float absVal(float a)
-{
-	if(a < 0)
-	{
-		return (a * -1);
-	}
-   	else
-	{ 
-		return a;
-	}
-}
-
-static float percentDiff(double val1, double val2)
-{
-	if ((absVal(val1) < 0.01) && (absVal(val2) < 0.01))
-	{
-		return 0.0f;
-	}
-
-	else
-	{
-    		return 100.0f * (absVal(absVal(val1 - val2) / absVal(val1 + SMALL_FLOAT_VAL)));
-	}
+    else{
+        return 100.0f * (absVal(absVal(val1 - val2) / absVal(val1 + SMALL_FLOAT_VAL)));
+    }
 }
 
 #define PERCENT_DIFF_ERROR_THRESHOLD 0.05
-static void compareResults(int ni, int nj, float *B, float *BGPU)
-{
-	int i, j, fail;
-	fail = 0;
-	
-	// Compare outputs from CPU and GPU
-	for (i=1; i < (ni-1); i++) 
-	{
-		for (j=1; j < (nj-1); j++) 
-		{
-			if (percentDiff(B[i*nj+j], BGPU[i*nj+j]) > PERCENT_DIFF_ERROR_THRESHOLD) 
-			{
-				fail++;
-				printf("fail i: %d j: %d\n", i, j);
-			}
-		}
-	}
-	
-	// Print results
-	printf("Non-Matching CPU-GPU Outputs Beyond Error Threshold of %4.2f Percent: %d\n", PERCENT_DIFF_ERROR_THRESHOLD, fail);
-	
+static void compareResults(int ni, int nj, float *B, float *BGPU){
+    int i, j, fail;
+    fail = 0;
+
+    // Compare outputs from CPU and GPU
+    for (i=1; i < (ni-1); i++) {
+        for (j=1; j < (nj-1); j++) {
+            if (percentDiff(B[i*nj+j], BGPU[i*nj+j]) > PERCENT_DIFF_ERROR_THRESHOLD) {
+                fail++;
+                printf("fail i: %d j: %d\n", i, j);
+            }
+        }
+    }
+
+    // Print results
+    printf("Non-Matching CPU-GPU Outputs Beyond Error Threshold of %4.2f Percent: %d\n", PERCENT_DIFF_ERROR_THRESHOLD, fail);
+
 }
 
-static void conv2DCPU(int ni, int nj, float* A, float *B)
-{
-	int i, j;
-	float c11, c12, c13, c21, c22, c23, c31, c32, c33;
+static void conv2DCPU(int ni, int nj, float* A, float *B){
+    int i, j;
+    float c11, c12, c13, c21, c22, c23, c31, c32, c33;
 
-	c11 = +0.2;  c21 = +0.5;  c31 = -0.8;
-	c12 = -0.3;  c22 = +0.6;  c32 = -0.9;
-	c13 = +0.4;  c23 = +0.7;  c33 = +0.10;
+    c11 = +0.2;  c21 = +0.5;  c31 = -0.8;
+    c12 = -0.3;  c22 = +0.6;  c32 = -0.9;
+    c13 = +0.4;  c23 = +0.7;  c33 = +0.10;
 
 
-	for (i = 1; i < ni - 1; ++i) // 0
-	{
-		for (j = 1; j < nj - 1; ++j) // 1
-		{
-        B[i * nj + j] =  c11 * A[(i - 1) * nj + (j - 1)] + 
-                         c21 * A[(i - 1) * nj + (j + 0)] + 
-                         c31 * A[(i - 1) * nj + (j + 1)] + 
-                         c12 * A[(i + 0) * nj + (j - 1)] + 
-                         c22 * A[(i + 0) * nj + (j + 0)] + 
-                         c32 * A[(i + 0) * nj + (j + 1)] + 
-                         c13 * A[(i + 1) * nj + (j - 1)] + 
-                         c23 * A[(i + 1) * nj + (j + 0)] + 
-                         c33 * A[(i + 1) * nj + (j + 1)];
-		}
-	}
+    for (i = 1; i < ni - 1; ++i) {
+        for (j = 1; j < nj - 1; ++j){
+            B[i * nj + j] =  c11 * A[(i - 1) * nj + (j - 1)] + 
+                c21 * A[(i - 1) * nj + (j + 0)] + 
+                c31 * A[(i - 1) * nj + (j + 1)] + 
+                c12 * A[(i + 0) * nj + (j - 1)] + 
+                c22 * A[(i + 0) * nj + (j + 0)] + 
+                c32 * A[(i + 0) * nj + (j + 1)] + 
+                c13 * A[(i + 1) * nj + (j - 1)] + 
+                c23 * A[(i + 1) * nj + (j + 0)] + 
+                c33 * A[(i + 1) * nj + (j + 1)];
+        }
+    }
 }
 
-static void initA(int ni, int nj, float* A)
-{
+static void initA(int ni, int nj, float* A){
     int i, j;
 
-    for (i = 0; i < ni; ++i)
-    {
-        for (j = 0; j < nj; ++j)
-        {
+    for (i = 0; i < ni; ++i){
+        for (j = 0; j < nj; ++j){
             A[nj*i+j] = (float)rand()/RAND_MAX;
         }
     }
 }
 
-static __device__ __inline__ uint64_t getTime(void){
-    uint64_t time;
-    asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(time));
-    return time;
-}
-
-static __global__ void getMeasurementOverhead(param_t data) {
-    uint64_t start, stop;
+static __global__ void getStartTime(param_t data) {
     if(threadIdx.x == 0){
-        start = getTime();
+        *data.targetStartTime = getTime() + START_TIME_OFFSET_NS;
     }
     __syncthreads();
-    if(threadIdx.x == 0){
-        stop = getTime();
-        *data.targetMeasOH = stop-start;
-    }
 }
 
-#ifdef USE_BARRIER
-static __device__ inline int barrierWait(barrier_t barrier, int* local_sense) {
-    *local_sense = !(*local_sense);
-    int value = atomicSub(barrier.threadsRemaining, 1);
+// ----------------------------------- 
+//         PREM SYNC functions
+// ----------------------------------- 
 
-    if(value==1) {
 
-    atomicExch(barrier.threadsRemaining, barrier.thread_count);
-    *(barrier.sense) = *local_sense;
-    return 1;
+static __device__ __inline__ void spinUntil(uint64_t endTime){
+    if( threadIdx.x == 0){
+//        printf("Curr: %lu, end: %lu\n",getTime(), endTime);
+        while(getTime() < endTime);
     }
-
-    while (*(barrier.sense) != *local_sense){
-        asm volatile("membar.gl;" : : :);
-        continue;
-    }
-    return 1;
 }
-#endif
-
-static __device__ __inline__ unsigned int get_smid(void)
-{
-    unsigned int ret;
-    asm("mov.u32 %0, %%smid;":"=r"(ret) );
-    return ret;
-}
-
-
-static __device__ __inline__ void syncPrefetch(int tileId, int kernelId)
-{
+#if 0
+static __device__ __inline__ void syncPrefetch(int tileId, int kernelId){
     if(tileId == 0){
         return;
     }
     if(threadIdx.x == 0){
 
     }
+    if(threadIdx.x == 0 && blockIdx.x == 0){
+        printf("Kernel %d, masterGT: %lu\n",kernelId, *masterGT);
+    }
 }
+#endif
 
 //#define PREM_SHM_SIZE (32768/(2*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4 nj=1024 inputdata: 4096x4090 
 #define PREM_SHM_SIZE (32768/(4*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4, nj=512 inputdata: 4098 4082, 1026x1022
@@ -229,13 +170,18 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
 #ifdef USE_PREM_PROF
     uint64_t prefetchtime  = 0;
     uint64_t computetime   = 0;
-    int tileCount = 0;
     uint64_t stamp1, stamp2;
 #endif
+    int reg_tileCount = 0;
+    int reg_kernelId = data.kernelId;
+    uint64_t reg_startTime = *data.startTime;
+   
+    // Spin until PREM schedule start time 
+    spinUntil(reg_startTime);
 
-    uint64_t start_time = getTime();
+    uint64_t block_start_time = getTime();
     if(threadIdx.x == 0){
-        data.targetTimes[blockIdx.x*2] = start_time;
+        data.targetTimes[blockIdx.x*2] = block_start_time;
         data.smid[blockIdx.x] = get_smid();
     }
     __syncthreads();
@@ -258,10 +204,11 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     c11 = +0.2;  c21 = +0.5;  c31 = -0.8;
     c12 = -0.3;  c22 = +0.6;  c32 = -0.9;
     c13 = +0.4;  c23 = +0.7;  c33 = +0.10;
-    
+
+
     for(int niTile = blockIdx.y; niTile <= ni-PREM_NI_TILE_SIZE; niTile += (PREM_NI_TILE_SIZE/2)){
         for(int njTile = blockIdx.x*(nj_tile_size-PREM_NJ_OVERLAP); njTile <= nj-nj_tile_size; njTile += (nj_tile_size-PREM_NJ_OVERLAP)*gridDim.x){
-            
+
 #ifdef USE_BARRIER
             if(threadIdx.x == 0){
                 barrierWait(data.barrier, &local_sense);
@@ -269,24 +216,24 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
             __syncthreads();
 #endif
             /* ---------------------------------- */
-               //Prefetch data
+            //Prefetch data
             /* ---------------------------------- */
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-               stamp1 = getTime(); 
+                stamp1 = getTime(); 
             }
 #endif
 
             for (int i = threadIdx.y; (i < ni_tile_size) && (i + niTile < ni); i += blockDim.y){
                 for (int j = threadIdx.x; (j < nj_tile_size) && (j + njTile < nj); j += blockDim.x) {
-                                A_SHM[i * nj_tile_size + j] = A[(i+niTile)*nj + (j+njTile)];
+                    A_SHM[i * nj_tile_size + j] = A[(i+niTile)*nj + (j+njTile)];
                 }
             }
             __syncthreads();
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-               stamp2 = getTime();
-               prefetchtime = stamp2-stamp1;
+                stamp2 = getTime();
+                prefetchtime = stamp2-stamp1;
             }
 #endif
             /* ---------------------------------- */
@@ -294,15 +241,15 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
             /* ---------------------------------- */
             for (int i = threadIdx.y+1; i < ni_tile_size-1; i += blockDim.y){
                 for (int j = threadIdx.x+1; j < nj_tile_size-1; j += blockDim.x) {
-                                B_SHM[i * nj_tile_size + j] = c11 * A_SHM[(i - 1) * nj_tile_size + (j - 1)] + 
-                                                              c21 * A_SHM[(i - 1) * nj_tile_size + (j + 0)] + 
-                                                              c31 * A_SHM[(i - 1) * nj_tile_size + (j + 1)] + 
-                                                              c12 * A_SHM[(i + 0) * nj_tile_size + (j - 1)] + 
-                                                              c22 * A_SHM[(i + 0) * nj_tile_size + (j + 0)] + 
-                                                              c32 * A_SHM[(i + 0) * nj_tile_size + (j + 1)] + 
-                                                              c13 * A_SHM[(i + 1) * nj_tile_size + (j - 1)] + 
-                                                              c23 * A_SHM[(i + 1) * nj_tile_size + (j + 0)] + 
-                                                              c33 * A_SHM[(i + 1) * nj_tile_size + (j + 1)];
+                    B_SHM[i * nj_tile_size + j] = c11 * A_SHM[(i - 1) * nj_tile_size + (j - 1)] + 
+                        c21 * A_SHM[(i - 1) * nj_tile_size + (j + 0)] + 
+                        c31 * A_SHM[(i - 1) * nj_tile_size + (j + 1)] + 
+                        c12 * A_SHM[(i + 0) * nj_tile_size + (j - 1)] + 
+                        c22 * A_SHM[(i + 0) * nj_tile_size + (j + 0)] + 
+                        c32 * A_SHM[(i + 0) * nj_tile_size + (j + 1)] + 
+                        c13 * A_SHM[(i + 1) * nj_tile_size + (j - 1)] + 
+                        c23 * A_SHM[(i + 1) * nj_tile_size + (j + 0)] + 
+                        c33 * A_SHM[(i + 1) * nj_tile_size + (j + 1)];
 
                 }
             }
@@ -310,8 +257,8 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
             __syncthreads();
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-               stamp1 = getTime();
-               computetime = stamp1 - stamp2;
+                stamp1 = getTime();
+                computetime = stamp1 - stamp2;
             }
 #endif
 
@@ -320,32 +267,40 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
             /* ---------------------------------- */
             for (int i = threadIdx.y+1; (i < ni_tile_size-1) && (i + niTile < ni-1); i += blockDim.y){
                 for (int j = threadIdx.x+1; (j < nj_tile_size-1) && (j + njTile < nj-1); j += blockDim.x) {
-                                B[(i+niTile) * nj + (j+njTile)] = B_SHM[i*nj_tile_size + j];
+                    B[(i+niTile) * nj + (j+njTile)] = B_SHM[i*nj_tile_size + j];
 
                 }
             }
 
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-               stamp2= getTime();
-               // Write times to global memory
-               data.prefetchTimes[blockIdx.x*TIME_PADDING+tileCount] = prefetchtime;
-               data.computeTimes[blockIdx.x*TIME_PADDING+tileCount] = computetime;
-               data.writebackTimes[blockIdx.x*TIME_PADDING+tileCount] = stamp2-stamp1;
-               tileCount++;
+                stamp2= getTime();
+                // Write times to global memory
+                data.prefetchTimes[blockIdx.x*TIME_PADDING+tileCount] = prefetchtime;
+                data.computeTimes[blockIdx.x*TIME_PADDING+tileCount] = computetime;
+                data.writebackTimes[blockIdx.x*TIME_PADDING+tileCount] = stamp2-stamp1;
             }
 #endif
+            if(threadIdx.x == 0){
+                reg_tileCount++;
+            }
 
         }
     }
 
-    __syncthreads();
+    spinUntil(reg_startTime+100000000);
+    //__syncthreads();
     if(threadIdx.x == 0){
         data.targetTimes[blockIdx.x*2+1] = getTime();
 #ifdef USE_PREM_PROF
         *data.tileCount = tileCount;
 #endif
     }
+    /*
+       if(threadIdx.x == 0 && blockIdx.x == 0){
+       printf("Kernel %d, masterGT: %lu\n",kernelId, *data.masterGT);
+       }
+     */
 }
 
 
@@ -370,20 +325,20 @@ static __global__ void convolution2D_kernelLegacy(kernel_data_t data)
     c12 = -0.3;  c22 = +0.6;  c32 = -0.9;
     c13 = +0.4;  c23 = +0.7;  c33 = +0.10;
 
-	for (int i = blockIdx.y * blockDim.y + threadIdx.y+1; i < ni-1; i += blockDim.y * gridDim.y){
-		for (int j = blockIdx.x * blockDim.x + threadIdx.x+1; j < nj-1; j += blockDim.x * gridDim.x) {
-                        B[i * nj + j] =  c11 * A[(i - 1) * nj + (j - 1)] + 
-                            c21 * A[(i - 1) * nj + (j + 0)] + 
-                            c31 * A[(i - 1) * nj + (j + 1)] + 
-                            c12 * A[(i + 0) * nj + (j - 1)] + 
-                            c22 * A[(i + 0) * nj + (j + 0)] + 
-                            c32 * A[(i + 0) * nj + (j + 1)] + 
-                            c13 * A[(i + 1) * nj + (j - 1)] + 
-                            c23 * A[(i + 1) * nj + (j + 0)] + 
-                            c33 * A[(i + 1) * nj + (j + 1)];
+    for (int i = blockIdx.y * blockDim.y + threadIdx.y+1; i < ni-1; i += blockDim.y * gridDim.y){
+        for (int j = blockIdx.x * blockDim.x + threadIdx.x+1; j < nj-1; j += blockDim.x * gridDim.x) {
+            B[i * nj + j] =  c11 * A[(i - 1) * nj + (j - 1)] + 
+                c21 * A[(i - 1) * nj + (j + 0)] + 
+                c31 * A[(i - 1) * nj + (j + 1)] + 
+                c12 * A[(i + 0) * nj + (j - 1)] + 
+                c22 * A[(i + 0) * nj + (j + 0)] + 
+                c32 * A[(i + 0) * nj + (j + 1)] + 
+                c13 * A[(i + 1) * nj + (j - 1)] + 
+                c23 * A[(i + 1) * nj + (j + 0)] + 
+                c33 * A[(i + 1) * nj + (j + 1)];
 
-		}
-	}
+        }
+    }
     __syncthreads();
     if(threadIdx.x == 0){
         data.targetTimes[blockIdx.x*2+1] = getTime();
@@ -411,10 +366,10 @@ int initializeTest(param_t *params){
         return  -1;
     }
     initA(params->ni, params->nj, A);
-	conv2DCPU(params->ni, params->nj, A, B);
-	params->BCPU = B;
+    conv2DCPU(params->ni, params->nj, A, B);
+    params->BCPU = B;
 
-	params->BGPU=NULL;
+    params->BGPU=NULL;
     params->BGPU = (float *) malloc(params->ni*params->nj*sizeof(float));
     if (!params->BGPU) {
         perror("Failed allocating A matrix on host: ");
@@ -431,19 +386,19 @@ int initializeTest(param_t *params){
     memset(kernelData, 0, params->nofKernels*sizeof(kernel_data_t));
 
 #ifdef USE_PREM_PROF
-	params->prefetchTimes=NULL;
+    params->prefetchTimes=NULL;
     params->prefetchTimes = (uint64_t *) malloc(params->nofKernels * params->nofBlocks * TIME_PADDING *sizeof(uint64_t));
     if (!params->prefetchTimes) {
         perror("Failed allocating prefetch times on host: ");
         return  -1;
     }
-	params->computeTimes=NULL;
+    params->computeTimes=NULL;
     params->computeTimes = (uint64_t *) malloc(params->nofKernels * params->nofBlocks * TIME_PADDING *sizeof(uint64_t));
     if (!params->computeTimes) {
         perror("Failed allocating prefetch times on host: ");
         return  -1;
     }
-	params->writebackTimes=NULL;
+    params->writebackTimes=NULL;
     params->writebackTimes = (uint64_t *) malloc(params->nofKernels * params->nofBlocks * TIME_PADDING *sizeof(uint64_t));
     if (!params->writebackTimes) {
         perror("Failed allocating prefetch times on host: ");
@@ -459,6 +414,10 @@ int initializeTest(param_t *params){
     *threadsRemaining=params->nofBlocks*params->nofKernels;
     *sense = 0;
 #endif
+
+    // Allocate device startTime
+    if (CheckCUDAError(cudaMalloc(&params->targetStartTime, \
+                    sizeof(uint64_t)))) return -1;
 
     // Fill kernel_data structures
     for(int i = 0; i< params->nofKernels; i++){
@@ -513,7 +472,8 @@ int initializeTest(param_t *params){
         kernelData[i].barrier.sense=sense;
         kernelData[i].barrier.thread_count = params->nofBlocks*params->nofKernels;
 #endif
-
+        kernelData[i].startTime = params->targetStartTime;
+        kernelData[i].kernelId = i;
         kernelData[i].ni = params->ni;
         kernelData[i].nj = params->nj;
 
@@ -546,19 +506,13 @@ int initializeTest(param_t *params){
     }
     memset(params->smid,0 , params->nofKernels*params->nofBlocks*params->nof_repetitions*sizeof(float));
 
-    // Allocate device measOH
-    if (CheckCUDAError(cudaMalloc(&params->targetMeasOH, \
-                    sizeof(unsigned int)))) return -1;
 
-    // Get measurement overhead
-    getMeasurementOverhead<<<1,1>>>(*params);
-    if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
 
-    // Copyback target meas oh
-    params->hostMeasOH=0; 
-    if (CheckCUDAError(cudaMemcpy(&params->hostMeasOH, \
-                    params->targetMeasOH, \
-                    sizeof(unsigned int), \
+    // Copyback target startTime
+    params->hostStartTime=0; 
+    if (CheckCUDAError(cudaMemcpy(&params->hostStartTime, \
+                    params->targetStartTime, \
+                    sizeof(uint64_t), \
                     cudaMemcpyDeviceToHost))) return -1;
 
     // Assigne kernel data
@@ -618,13 +572,18 @@ int runTest(param_t *params){
 
     thread_data_t threadData[params->nofKernels];
 
-	pthread_t threads[params->nofKernels];
+    pthread_t threads[params->nofKernels];
 
-	int s = pthread_barrier_init(&barrier, NULL, params->nofKernels);
-	if (s != 0)
-		error(1, s, "pthread_barrier_init");
+    int s = pthread_barrier_init(&barrier, NULL, params->nofKernels);
+    if (s != 0)
+        error(1, s, "pthread_barrier_init");
 
     for(int rep = -1; rep < params->nof_repetitions; rep++){
+
+        // Get measurement startTime
+        getStartTime<<<1,1>>>(*params);
+
+    if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
         for(int kernel = 0; kernel < params->nofKernels; kernel++){
             threadData[kernel].cpu=kernel;
             threadData[kernel].nofThreads=params->nofThreads;
@@ -638,18 +597,20 @@ int runTest(param_t *params){
             pthread_join(threads[kernel], NULL);
         }
 
+        if (CheckCUDAError(cudaDeviceSynchronize())) perror("Problem with stream sync");
+
         for(int kernel = 0; kernel < params->nofKernels; kernel++){
             double milliseconds = 0.0;
             milliseconds = *kernelData[kernel].stop-*kernelData[kernel].start;
 
-		// Copyback B and check
+            // Copyback B and check
 
-        	if (CheckCUDAError(cudaMemcpy(params->BGPU, \
-                                kernelData[kernel].B, \
-                                params->ni*params->nj*sizeof(float), \
-                                cudaMemcpyDeviceToHost))) return -1;
+            if (CheckCUDAError(cudaMemcpy(params->BGPU, \
+                            kernelData[kernel].B, \
+                            params->ni*params->nj*sizeof(float), \
+                            cudaMemcpyDeviceToHost))) return -1;
 
-			compareResults(params->ni, params->nj, params->BCPU, params->BGPU);
+            compareResults(params->ni, params->nj, params->BCPU, params->BGPU);
             // Store data if no warm up iteration
             if(rep>=0){
                 printf("Elapsed time of kernel %d: %lfms\n",kernel,milliseconds);
@@ -704,7 +665,7 @@ int writeResults(param_t *params){
     if (fprintf(params->fd,"\"nofKernel\": \"%u\",\n", params->nofKernels)  < 0 ) return -1;
     if (fprintf(params->fd,"\"nof_repetitions\": \"%d\",\n", params->nof_repetitions)  < 0 ) return -1;
     if (fprintf(params->fd,"\"data_size\": \"%d\",\n", params->ni*params->nj)  < 0 ) return -1;
-    if (fprintf(params->fd,"\"measOH\": \"%lu\",\n", params->hostMeasOH)  < 0 ) return -1;
+    if (fprintf(params->fd,"\"start_time\": \"%lu\",\n", params->hostStartTime)  < 0 ) return -1;
 
     // Write times
 #ifdef USE_PREM_PROF
@@ -782,13 +743,13 @@ int cleanUp(param_t *params){
     }
 
     // Free target buffers
-    if(params->targetMeasOH != NULL) cudaFree(params->targetMeasOH);
+    if(params->targetStartTime != NULL) cudaFree(params->targetStartTime);
 
     // Free host buffers
 #ifdef USE_PREM_PROF
-        if(params->prefetchTimes != NULL)  free(params->prefetchTimes);
-        if(params->computeTimes != NULL)   free(params->computeTimes);
-        if(params->writebackTimes != NULL) free(params->writebackTimes);
+    if(params->prefetchTimes != NULL)  free(params->prefetchTimes);
+    if(params->computeTimes != NULL)   free(params->computeTimes);
+    if(params->writebackTimes != NULL) free(params->writebackTimes);
 #endif
     if(params->kernelTimes != NULL) free(params->kernelTimes);
     if(params->blockTimes != NULL) free(params->blockTimes);

@@ -19,8 +19,8 @@ typedef struct {
     double *kernelTimes;
     uint64_t *blockTimes;
     unsigned int *smid;
-    uint64_t *targetMeasOH;
-    uint64_t hostMeasOH;
+    uint64_t *targetStartTime;
+    uint64_t hostStartTime;
     void * kernelData;
     FILE *fd;
 #ifdef USE_PREM_PROF

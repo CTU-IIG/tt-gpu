@@ -20,7 +20,7 @@ export PATH:=/usr/local/cuda/bin:$(PATH)
 
 all: $(EXE)
 
-$(EXE): main.c interference.c $(EXE).cu
+$(EXE): main.c $(EXE).cu
 	nvcc $(NVCCFLAGS) $^ -o $@
 
 target_build: deploy
