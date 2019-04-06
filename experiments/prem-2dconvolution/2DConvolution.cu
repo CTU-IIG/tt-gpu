@@ -12,15 +12,11 @@
 #include "utility_func.h"
 
 #define DEVICE_NUMBER (0)
-#define START_TIME_OFFSET_NS (1000000000) //10ms
+#define START_TIME_OFFSET_NS (10000000) //10ms
 
-//#define USE_BARRIER
-#ifdef USE_BARRIER
-#include "cuda_barrier.cuh"
-#endif
 
 #ifdef USE_PREM_PROF
-#define TIME_PADDING (1536)
+#define TIME_PADDING (2500)
 #endif
 
 typedef struct {
@@ -28,11 +24,12 @@ typedef struct {
     float *B;
     int ni;
     int nj;
-    int kernelId;
+    unsigned int kernelId;
+    unsigned int nofKernel;
     uint64_t *targetTimes;
     uint64_t *startTime;
 #ifdef USE_PREM_PROF
-    int *tileCount;
+    unsigned int *tileCount;
     uint64_t *prefetchTimes;
     uint64_t *computeTimes;
     uint64_t *writebackTimes;
@@ -41,9 +38,6 @@ typedef struct {
     cudaStream_t stream;
     double *start;
     double *stop;
-#ifdef USE_BARRIER
-    barrier_t barrier;
-#endif
 } kernel_data_t;
 
 
@@ -135,31 +129,73 @@ static __global__ void getStartTime(param_t data) {
 //         PREM SYNC functions
 // ----------------------------------- 
 
-
 static __device__ __inline__ void spinUntil(uint64_t endTime){
     if( threadIdx.x == 0){
-//        printf("Curr: %lu, end: %lu\n",getTime(), endTime);
         while(getTime() < endTime);
     }
 }
-#if 0
-static __device__ __inline__ void syncPrefetch(int tileId, int kernelId){
-    if(tileId == 0){
-        return;
-    }
-    if(threadIdx.x == 0){
 
-    }
-    if(threadIdx.x == 0 && blockIdx.x == 0){
-        printf("Kernel %d, masterGT: %lu\n",kernelId, *masterGT);
+#ifdef SCHEDULE
+// Phase times manually evaluated
+#if 1
+#define PREM_PF_PHASE (2000)
+#define PREM_C_PHASE (700)
+#define PREM_WB_PHASE (500)
+#else
+
+// Phase times pessimistic
+#define PREM_PF_PHASE (3000)
+#define PREM_C_PHASE (1700)
+#define PREM_WB_PHASE (1500)
+#endif
+
+
+/* Single phase schedule*/
+#ifndef WB_SHIFT_BACK
+#define WB_SHIFT_BACK (0)
+#endif
+
+#ifndef PREM_PF_PHASE_OFFSET
+#define PREM_PF_PHASE_OFFSET (0)
+#endif
+
+
+#define WARM_UP_OFFSET (10000)
+static __device__ __inline__ void syncPrefetch(const uint64_t startTime, const unsigned int tileId, const unsigned int id , const unsigned int tileoffset, const unsigned int phaseoffset){
+    if(tileId > 0){
+        if(threadIdx.x == 0){
+                uint64_t delay = (startTime + WARM_UP_OFFSET) + ((tileId-1) * tileoffset) + (id * phaseoffset);
+                while(getTime() < delay);
+        }
     }
 }
+
+#ifdef PREM_SCHEDULE_ALL_PHASES
+
+#ifndef PREM_WB_PHASE_OFFSET
+#define PREM_WB_PHASE_OFFSET (0)
 #endif
+
+static __device__ __inline__ void syncWriteBack(const uint64_t startTime, const unsigned int tileId, const unsigned int id, const unsigned int pfTileOffset, const unsigned int wbTileOffset, unsigned int wbPhaseOffset){
+    if(tileId > 0){
+        if(threadIdx.x == 0){
+            uint64_t delay = (startTime + WARM_UP_OFFSET) + ((tileId-1) * pfTileOffset) + wbTileOffset + (id * wbPhaseOffset);
+            while(getTime() < delay);
+
+        }
+    }
+}
+
+#endif /*PREM_SCHEDULE_ALL_PHASES*/
+
+#endif /*SCHEDULE*/
 
 //#define PREM_SHM_SIZE (32768/(2*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4 nj=1024 inputdata: 4096x4090 
 #define PREM_SHM_SIZE (32768/(4*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4, nj=512 inputdata: 4098 4082, 1026x1022
-#define PREM_NI_TILE_SIZE (4)
 #define PREM_NJ_OVERLAP (2)
+
+#define PREM_NI_TILE_SIZE (4)
+#define PREM_NJ_TILE_SIZE (PREM_SHM_SIZE/PREM_NI_TILE_SIZE)
 
 // Premification for datasets of size 512x512, 1024x1024 and 4096x4090
 static __global__ void convolution2D_kernelPREM(kernel_data_t data)
@@ -168,12 +204,45 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     __shared__ float B_SHM[PREM_SHM_SIZE];
 
 #ifdef USE_PREM_PROF
-    uint64_t prefetchtime  = 0;
-    uint64_t computetime   = 0;
-    uint64_t stamp1, stamp2;
-#endif
-    int reg_tileCount = 0;
-    int reg_kernelId = data.kernelId;
+    uint64_t reg_prof_pf_start  = 0;
+    uint64_t reg_prof_pf_end  = 0;
+    uint64_t reg_prof_c_end  = 0;
+    uint64_t reg_prof_wb_start  = 0;
+    uint64_t reg_prof_wb_end  = 0;
+#endif /*USE_PREM_PROF*/
+
+    unsigned int reg_tileCount = 0;
+
+#ifdef SCHEDULE
+
+#ifdef KERNELWISE_SYNC
+    unsigned int reg_blockId = data.kernelId;
+#else
+    unsigned int reg_blockId = (data.kernelId * gridDim.x) + blockIdx.x;
+#endif /*KERNELWISE_SYNC*/
+
+#ifndef PREM_SCHEDULE_ALL_PHASES
+
+#ifdef KERNELWISE_SYNC
+    unsigned int reg_pftileoffset = ((data.nofKernel-1) * PREM_PF_PHASE_OFFSET) + (PREM_PF_PHASE + PREM_C_PHASE + PREM_WB_PHASE);
+#else
+    unsigned int reg_pftileoffset = (((data.nofKernel * gridDim.x)-1) * PREM_PF_PHASE_OFFSET) + (PREM_PF_PHASE + PREM_C_PHASE + PREM_WB_PHASE);
+#endif /*KERNELWISE_SYNC*/
+
+#else /*PREM_SCHEDULE_ALL_PHASES*/
+
+#ifdef KERNELWISE_SYNC
+    unsigned int reg_wbtileoffset = ((data.nofKernel-1) * PREM_PF_PHASE_OFFSET) + PREM_PF_PHASE;
+    unsigned int reg_pftileoffset = reg_wbtileoffset + (((data.nofKernel-1) * PREM_WB_PHASE_OFFSET) + PREM_WB_PHASE);
+#else
+    unsigned int reg_wbtileoffset = (((data.nofKernel * gridDim.x)-1) * PREM_PF_PHASE_OFFSET) + PREM_PF_PHASE;
+    unsigned int reg_pftileoffset = reg_wbtileoffset + ((((data.nofKernel * gridDim.x)-1) * PREM_WB_PHASE_OFFSET) + PREM_WB_PHASE);
+#endif /*KERNELWISE_SYNC*/
+
+#endif /*PREM_SCHEDULE_ALL_PHASES*/
+
+#endif /*SCHEDULE*/
+
     uint64_t reg_startTime = *data.startTime;
    
     // Spin until PREM schedule start time 
@@ -186,18 +255,11 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
     }
     __syncthreads();
 
-#ifdef USE_BARRIER
-    int local_sense = 0;
-#endif
-
     float *A = data.A;
     float *B = data.B;
 
     int ni = data.ni;
     int nj = data.nj;
-
-    int ni_tile_size = PREM_NI_TILE_SIZE;
-    int nj_tile_size = PREM_SHM_SIZE/ni_tile_size;
 
     float c11, c12, c13, c21, c22, c23, c31, c32, c33;
 
@@ -207,78 +269,92 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
 
 
     for(int niTile = blockIdx.y; niTile <= ni-PREM_NI_TILE_SIZE; niTile += (PREM_NI_TILE_SIZE/2)){
-        for(int njTile = blockIdx.x*(nj_tile_size-PREM_NJ_OVERLAP); njTile <= nj-nj_tile_size; njTile += (nj_tile_size-PREM_NJ_OVERLAP)*gridDim.x){
+        for(int njTile = blockIdx.x*(PREM_NJ_TILE_SIZE-PREM_NJ_OVERLAP); njTile <= nj-PREM_NJ_TILE_SIZE; njTile += (PREM_NJ_TILE_SIZE-PREM_NJ_OVERLAP)*gridDim.x){
 
-#ifdef USE_BARRIER
-            if(threadIdx.x == 0){
-                barrierWait(data.barrier, &local_sense);
-            }
-            __syncthreads();
-#endif
             /* ---------------------------------- */
             //Prefetch data
             /* ---------------------------------- */
+#ifdef SCHEDULE
+            syncPrefetch(reg_startTime, reg_tileCount, reg_blockId, reg_pftileoffset, PREM_PF_PHASE_OFFSET);
+            __syncthreads();
+#endif /*SCHEDULE*/
+
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-                stamp1 = getTime(); 
+                reg_prof_pf_start = getTime(); 
             }
-#endif
-
-            for (int i = threadIdx.y; (i < ni_tile_size) && (i + niTile < ni); i += blockDim.y){
-                for (int j = threadIdx.x; (j < nj_tile_size) && (j + njTile < nj); j += blockDim.x) {
-                    A_SHM[i * nj_tile_size + j] = A[(i+niTile)*nj + (j+njTile)];
+#endif /*USE_PREM_PROF*/
+            for (int i = threadIdx.y; (i < PREM_NI_TILE_SIZE) && (i + niTile < ni); i += blockDim.y){
+                for (int j = threadIdx.x; (j < PREM_NJ_TILE_SIZE) && (j + njTile < nj); j += blockDim.x) {
+                    A_SHM[i * PREM_NJ_TILE_SIZE + j] = A[(i+niTile)*nj + (j+njTile)];
                 }
             }
             __syncthreads();
+
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-                stamp2 = getTime();
-                prefetchtime = stamp2-stamp1;
+                reg_prof_pf_end = getTime();
             }
-#endif
+#endif /*USE_PREM_PROF*/
             /* ---------------------------------- */
             // Compute on SHM
             /* ---------------------------------- */
-            for (int i = threadIdx.y+1; i < ni_tile_size-1; i += blockDim.y){
-                for (int j = threadIdx.x+1; j < nj_tile_size-1; j += blockDim.x) {
-                    B_SHM[i * nj_tile_size + j] = c11 * A_SHM[(i - 1) * nj_tile_size + (j - 1)] + 
-                        c21 * A_SHM[(i - 1) * nj_tile_size + (j + 0)] + 
-                        c31 * A_SHM[(i - 1) * nj_tile_size + (j + 1)] + 
-                        c12 * A_SHM[(i + 0) * nj_tile_size + (j - 1)] + 
-                        c22 * A_SHM[(i + 0) * nj_tile_size + (j + 0)] + 
-                        c32 * A_SHM[(i + 0) * nj_tile_size + (j + 1)] + 
-                        c13 * A_SHM[(i + 1) * nj_tile_size + (j - 1)] + 
-                        c23 * A_SHM[(i + 1) * nj_tile_size + (j + 0)] + 
-                        c33 * A_SHM[(i + 1) * nj_tile_size + (j + 1)];
+            for (int i = threadIdx.y+1; i < PREM_NI_TILE_SIZE-1; i += blockDim.y){
+                for (int j = threadIdx.x+1; j < PREM_NJ_TILE_SIZE-1; j += blockDim.x) {
+                    B_SHM[i * PREM_NJ_TILE_SIZE + j] = c11 * A_SHM[(i - 1) * PREM_NJ_TILE_SIZE + (j - 1)] + 
+                        c21 * A_SHM[(i - 1) * PREM_NJ_TILE_SIZE + (j + 0)] + 
+                        c31 * A_SHM[(i - 1) * PREM_NJ_TILE_SIZE + (j + 1)] + 
+                        c12 * A_SHM[(i + 0) * PREM_NJ_TILE_SIZE + (j - 1)] + 
+                        c22 * A_SHM[(i + 0) * PREM_NJ_TILE_SIZE + (j + 0)] + 
+                        c32 * A_SHM[(i + 0) * PREM_NJ_TILE_SIZE + (j + 1)] + 
+                        c13 * A_SHM[(i + 1) * PREM_NJ_TILE_SIZE + (j - 1)] + 
+                        c23 * A_SHM[(i + 1) * PREM_NJ_TILE_SIZE + (j + 0)] + 
+                        c33 * A_SHM[(i + 1) * PREM_NJ_TILE_SIZE + (j + 1)];
 
                 }
             }
 
             __syncthreads();
+
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-                stamp1 = getTime();
-                computetime = stamp1 - stamp2;
+                reg_prof_c_end = getTime();
             }
-#endif
+#endif /*USE_PREM_PROF*/
+
+#ifdef SCHEDULE
+#ifdef PREM_SCHEDULE_ALL_PHASES
+            syncWriteBack(reg_startTime, reg_tileCount, reg_blockId, reg_pftileoffset, reg_wbtileoffset-WB_SHIFT_BACK, PREM_WB_PHASE_OFFSET);
+            __syncthreads();
+#endif /*PREM_SCHEDULE_ONE_PHASE*/
+#endif /*SCHEDULE*/
+
+#ifdef USE_PREM_PROF
+            if(threadIdx.x == 0){
+                reg_prof_wb_start = getTime();
+            }
+#endif /*USE_PREM_PROF*/
 
             /* ---------------------------------- */
             // Write back data
             /* ---------------------------------- */
-            for (int i = threadIdx.y+1; (i < ni_tile_size-1) && (i + niTile < ni-1); i += blockDim.y){
-                for (int j = threadIdx.x+1; (j < nj_tile_size-1) && (j + njTile < nj-1); j += blockDim.x) {
-                    B[(i+niTile) * nj + (j+njTile)] = B_SHM[i*nj_tile_size + j];
+            for (int i = threadIdx.y+1; (i < PREM_NI_TILE_SIZE-1) && (i + niTile < ni-1); i += blockDim.y){
+                for (int j = threadIdx.x+1; (j < PREM_NJ_TILE_SIZE-1) && (j + njTile < nj-1); j += blockDim.x) {
+                    B[(i+niTile) * nj + (j+njTile)] = B_SHM[i*PREM_NJ_TILE_SIZE + j];
 
                 }
             }
 
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
-                stamp2= getTime();
+                reg_prof_wb_end = getTime(); 
                 // Write times to global memory
-                data.prefetchTimes[blockIdx.x*TIME_PADDING+tileCount] = prefetchtime;
-                data.computeTimes[blockIdx.x*TIME_PADDING+tileCount] = computetime;
-                data.writebackTimes[blockIdx.x*TIME_PADDING+tileCount] = stamp2-stamp1;
+                data.prefetchTimes[blockIdx.x*TIME_PADDING+2*reg_tileCount] = reg_prof_pf_start;
+                data.prefetchTimes[blockIdx.x*TIME_PADDING+2*reg_tileCount+1] = reg_prof_pf_end;
+                data.computeTimes[blockIdx.x*TIME_PADDING+2*reg_tileCount] = reg_prof_pf_end;
+                data.computeTimes[blockIdx.x*TIME_PADDING+2*reg_tileCount+1] = reg_prof_c_end;
+                data.writebackTimes[blockIdx.x*TIME_PADDING+2*reg_tileCount] = reg_prof_wb_start;
+                data.writebackTimes[blockIdx.x*TIME_PADDING+2*reg_tileCount+1] = reg_prof_wb_end;
             }
 #endif
             if(threadIdx.x == 0){
@@ -288,12 +364,10 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
         }
     }
 
-    spinUntil(reg_startTime+100000000);
-    //__syncthreads();
     if(threadIdx.x == 0){
         data.targetTimes[blockIdx.x*2+1] = getTime();
 #ifdef USE_PREM_PROF
-        *data.tileCount = tileCount;
+        *data.tileCount = reg_tileCount;
 #endif
     }
     /*
@@ -406,15 +480,6 @@ int initializeTest(param_t *params){
     }
 #endif
 
-#ifdef USE_BARRIER
-    int *threadsRemaining; 
-    int *sense;
-    if (CheckCUDAError(cudaHostAlloc(&threadsRemaining, sizeof(int), cudaHostAllocMapped))) return -1;    
-    if (CheckCUDAError(cudaHostAlloc(&sense, sizeof(int), cudaHostAllocMapped))) return -1;    
-    *threadsRemaining=params->nofBlocks*params->nofKernels;
-    *sense = 0;
-#endif
-
     // Allocate device startTime
     if (CheckCUDAError(cudaMalloc(&params->targetStartTime, \
                     sizeof(uint64_t)))) return -1;
@@ -465,18 +530,13 @@ int initializeTest(param_t *params){
         if (CheckCUDAError(cudaMalloc(&kernelData[i].writebackTimes , \
                         params->nofBlocks * TIME_PADDING *sizeof(uint64_t)))) return -1;    
         if (CheckCUDAError(cudaMalloc(&kernelData[i].tileCount , \
-                        sizeof(int)))) return -1;    
-#endif
-#ifdef USE_BARRIER
-        kernelData[i].barrier.threadsRemaining=threadsRemaining;
-        kernelData[i].barrier.sense=sense;
-        kernelData[i].barrier.thread_count = params->nofBlocks*params->nofKernels;
+                        sizeof(unsigned int)))) return -1;    
 #endif
         kernelData[i].startTime = params->targetStartTime;
         kernelData[i].kernelId = i;
+        kernelData[i].nofKernel = params->nofKernels;
         kernelData[i].ni = params->ni;
         kernelData[i].nj = params->nj;
-
     }
 
     //allocate host times
@@ -601,7 +661,11 @@ int runTest(param_t *params){
 
         for(int kernel = 0; kernel < params->nofKernels; kernel++){
             double milliseconds = 0.0;
-            milliseconds = *kernelData[kernel].stop-*kernelData[kernel].start;
+            if(params->usePREM){
+                milliseconds = *kernelData[kernel].stop-*kernelData[kernel].start-(START_TIME_OFFSET_NS/1000000.0);
+            } else {
+                milliseconds = *kernelData[kernel].stop-*kernelData[kernel].start;
+            }
 
             // Copyback B and check
 
@@ -630,7 +694,7 @@ int runTest(param_t *params){
 #ifdef USE_PREM_PROF
                 if (CheckCUDAError(cudaMemcpy(&params->tileCount, \
                                 kernelData[kernel].tileCount, \
-                                sizeof(int), \
+                                sizeof(unsigned int), \
                                 cudaMemcpyDeviceToHost))) return -1;
                 if (CheckCUDAError(cudaMemcpy(&params->prefetchTimes[params->nofBlocks*TIME_PADDING*kernel], \
                                 kernelData[kernel].prefetchTimes, \
@@ -673,7 +737,7 @@ int writeResults(param_t *params){
 
     if (fprintf(params->fd,"\"prefetchtimes\":[\n") < 0 ) return -1;
     for(int j = 0; j< params->nofKernels*params->nofBlocks; j++){
-        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+params->tileCount; i++){
+        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+2*params->tileCount; i++){
             if (fprintf(params->fd,"\"%lu\",\n",params->prefetchTimes[i]) < 0 ) return -1;
         }
     }
@@ -681,7 +745,7 @@ int writeResults(param_t *params){
 
     if (fprintf(params->fd,"\"computetimes\":[\n") < 0 ) return -1;
     for(int j = 0; j< params->nofKernels*params->nofBlocks; j++){
-        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+params->tileCount; i++){
+        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+2*params->tileCount; i++){
             if (fprintf(params->fd,"\"%lu\",\n",params->computeTimes[i]) < 0 ) return -1;
         }
     }
@@ -689,7 +753,7 @@ int writeResults(param_t *params){
 
     if (fprintf(params->fd,"\"writebacktimes\":[\n") < 0 ) return -1;
     for(int j = 0; j< params->nofKernels*params->nofBlocks; j++){
-        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+params->tileCount; i++){
+        for (int i = j*TIME_PADDING; i < (j*TIME_PADDING)+2*params->tileCount; i++){
             if (fprintf(params->fd,"\"%lu\",\n",params->writebackTimes[i]) < 0 ) return -1;
         }
     }
@@ -735,10 +799,6 @@ int cleanUp(param_t *params){
         if(kernelData->prefetchTimes != NULL) cudaFree(kernelData->prefetchTimes);
         if(kernelData->computeTimes != NULL) cudaFree(kernelData->computeTimes);
         if(kernelData->writebackTimes != NULL) cudaFree(kernelData->writebackTimes);
-#endif
-#ifdef USE_BARRIER
-        if(kernelData->barrier.threadsRemaining != NULL) cudaFree(kernelData->barrier.threadsRemaining);
-        if(kernelData->barrier.sense != NULL) cudaFree(kernelData->barrier.sense);
 #endif
     }
 

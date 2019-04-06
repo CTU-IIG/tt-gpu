@@ -16,15 +16,22 @@ class Block:
         self.smid = smid
         self.id = bid
         self.maxThreadsOnSM = 2048
+        self.intervals = []
 
     def draw(self, ax, colors):
         thread_lower = self.threadOffset
         thread_upper = self.threadOffset + self.nofThreads
-        ax.fill_between([self.start, self.end], [thread_upper, thread_upper], [thread_lower, thread_lower], facecolor=colors[self.kernel], alpha=0.4, hatch=hatches[self.kernel],edgecolor='k',linewidth=1.0)
+        if len(self.intervals) == 0:
+            # Print without prem intervals
+            ax.broken_barh([(self.start, self.end-self.start)], (thread_lower, thread_upper-thread_lower), facecolor=colors[self.kernel], alpha=0.4, hatch=hatches[self.kernel],edgecolor='k',linewidth=1.0)
+
+            #ax.fill_between([self.start, self.end], [thread_upper, thread_upper], [thread_lower, thread_lower], facecolor=colors[self.kernel], alpha=0.4, hatch=hatches[self.kernel],edgecolor='k',linewidth=1.0)
+        else:
+            # Print with prem intervals
+            ax.broken_barh(self.intervals, (thread_lower, thread_upper-thread_lower), facecolor=(colors[0],colors[1],colors[2]), alpha=0.4, hatch=hatches[self.kernel],edgecolor='k',linewidth=1.0)
+
         
-        ax.text(self.start+(self.end-self.start)/2,thread_lower+(thread_upper-thread_lower)/2,"K: "+str(self.kernel)+":"+str(self.id))
-
-
+        ax.text(self.start+(self.end-self.start)/2,thread_lower+(thread_upper-thread_lower)/2,"K:"+str(self.kernel)+":"+str(self.id),horizontalalignment='center',verticalalignment='center')
 
     def isOverlap(self, block):
         mythread_lower = self.threadOffset
@@ -40,30 +47,18 @@ class Block:
             #print("K"+str(self.kernel)+":"+str(self.id)+" Overlap")
             return True
     
-    def getEnd(self):
-        return self.end
-
-    def getStart(self):
-        return self.start
-
-    def getSmid(self):
-        return self.smid
-
-    def getNofThreads(self):
-        return self.nofThreads
-
-    def getThreadOffset(self):
-        return self.threadOffset
-    
-    def setThreadOffset(self, offset):
-        if offset + self.nofThreads <= self.maxThreadsOnSM and offset >= 0:
-            self.threadOffset = offset
-    
     def incThreadOffset(self, amount):
         if self.threadOffset + self.nofThreads + amount <= self.maxThreadsOnSM:
             self.threadOffset += amount
 
-def retrieveBlocksOfKernel(kernel, nofThreads, times, smid):
+    def addPREMintervals(self, prefetch, compute, writeback):
+        for i in range(0, len(prefetch), 2):
+            self.intervals.append((prefetch[i], prefetch[i+1]-prefetch[i]))
+            self.intervals.append((compute[i], compute[i+1]-compute[i]))
+            self.intervals.append((writeback[i], writeback[i+1]-writeback[i]))
+
+        print("Interval len: "+str(len(self.intervals)))
+def retrieveBlocksOfKernel(kernel, nofThreads, times, smid, tileCount=0, prefetchtimes=[], computetimes=[], writebacktimes=[]):
     # Split into start end times
     start_times = []
     stop_times = []
@@ -76,11 +71,12 @@ def retrieveBlocksOfKernel(kernel, nofThreads, times, smid):
     blocks = []
     for blockid in range(0,len(smid)):
             block = Block(kernel, nofThreads, times[2*blockid], times[2*blockid+1], smid[blockid], blockid)
+            block.addPREMintervals(prefetchtimes[blockid*2*tileCount:blockid*2*tileCount + 2*tileCount], computetimes[blockid*2*tileCount:blockid*2*tileCount + 2*tileCount], writebacktimes[blockid*2*tileCount:blockid*2*tileCount + 2*tileCount])
             blocks.append(block)
 
     return blocks
 
-def assignBlocksToSM(nofKernel, nofBlocks, nofThreads, blockTimes, smids, nofRepetitions=1):
+def assignBlocksToSM(nofKernel, nofBlocks, nofThreads, blockTimes, smids, nofRepetitions=1, tileCount=0, prefetchtimes=[], computetimes=[], writebacktimes=[]):
     agg_sm = {}
     for kernel in range(0,nofKernel):
 
@@ -89,14 +85,20 @@ def assignBlocksToSM(nofKernel, nofBlocks, nofThreads, blockTimes, smids, nofRep
         # Take only the first repetitions of blocktimes
         times = blockTimes[2*startindex:2*startindex+2*nofBlocks]
         smid = smids[startindex:startindex+nofBlocks]
+
+        startindex = kernel*nofBlocks*2*tileCount
+        
+        pt =   prefetchtimes[startindex:startindex+2*nofBlocks*tileCount]
+        ct =    computetimes[startindex:startindex+2*nofBlocks*tileCount]
+        wbt = writebacktimes[startindex:startindex+2*nofBlocks*tileCount]
         
         # Retrive the blocks of the kernel
-        blocks = retrieveBlocksOfKernel(kernel, nofThreads, times, smid)
+        blocks = retrieveBlocksOfKernel(kernel, nofThreads, times, smid, tileCount, pt, ct, wbt)
         # Put the retrived blocks to the according SM
         for block in blocks:
-            if block.getSmid() not in agg_sm:
-                agg_sm[block.getSmid()] = []
-            agg_sm[block.getSmid()].append(block)
+            if block.smid not in agg_sm:
+                agg_sm[block.smid] = []
+            agg_sm[block.smid].append(block)
             print("K"+str(block.kernel)+":"+str(block.id) +" - Start|End " +str(block.start)+"|"+str(block.end)+ " Interval: "+str((block.end-block.start)*1e-9)+"s")
     return agg_sm
               
@@ -108,7 +110,7 @@ def findFreeSlot(occupied, block):
         for block_fix in occupied:
             if block.isOverlap(block_fix):
                 # We have some overlap int 2D space here
-                block.incThreadOffset(block_fix.getNofThreads())
+                block.incThreadOffset(block_fix.nofThreads)
                 # Restart the search
                 restart = True
                 break
@@ -137,7 +139,7 @@ def adjustThreadOffset(agg_sm):
 def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
     fig = plt.figure()
     fig.suptitle("Blocks scheduled on SM's\n"+ title)
-    colors = cm.get_cmap('viridis', nofKernel).colors
+    colors = cm.get_cmap('viridis', 4).colors
     if len(agg_sm.keys()) < 2:
         # add dummy key
         agg_sm[1]= []
@@ -148,8 +150,10 @@ def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
             block.draw(ax, colors)
         ax.set_ylabel("NofThreads")
         ax.set_yticks(range(0,2049,512))
+        ax.set_xlim(0.001,0.00112)
         ax.set_xlabel("Time [s]")
         ax.set_title("SM "+str(i))
+        ax.grid(True)
 
 
 def drawScenario(filename, title):
@@ -161,10 +165,19 @@ def drawScenario(filename, title):
     nofKernel  = int(data['nofKernel'])
     nofRep     = int(data['nof_repetitions'])
     dataSize   = int(data['data_size'])
-    measOH     = int(data['measOH'])
     blockTimes = data['blocktimes']
     kernelTimes= data['kerneltimes']
     smids      = data['smid']
+
+    tileCount = 0
+    prefetchtimes = []
+    computetimes = []
+    writebacktimes = []
+    if "tileCount" in data:
+        tileCount = int(data['tileCount'])
+        prefetchtimes = [float(i) for i in data['prefetchtimes']]
+        computetimes = [float(i) for i in data['computetimes']]
+        writebacktimes = [float(i) for i in data['writebacktimes']]
 
     blockTimes = [float(i) for i in blockTimes]
     kernelTimes = [float(i) for i in kernelTimes]
@@ -173,8 +186,12 @@ def drawScenario(filename, title):
     minTime = min(blockTimes)
     maxTime = max(blockTimes)
     blockTimes= [(i-minTime)*1e-9 for i in blockTimes]
+    prefetchtimes= [(i-minTime)*1e-9 for i in prefetchtimes[:-1]]
+    computetimes= [(i-minTime)*1e-9 for i in computetimes[:-1]]
+    writebacktimes= [(i-minTime)*1e-9 for i in writebacktimes[:-1]]
 
-    agg_sm = assignBlocksToSM(nofKernel, nofBlocks, nofThreads, blockTimes, smids, nofRep)
+
+    agg_sm = assignBlocksToSM(nofKernel, nofBlocks, nofThreads, blockTimes, smids, nofRep, tileCount, prefetchtimes, computetimes, writebacktimes)
     adjustThreadOffset(agg_sm)
     drawBlocks(agg_sm, nofKernel, minTime, maxTime, title)
 
