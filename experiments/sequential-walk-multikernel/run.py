@@ -3,12 +3,10 @@ from subprocess import Popen, PIPE
 import json
 import statistics as st
 import sys
+import pathlib
 
-#if len(sys.argv) < 3:
-#    sys.exit(sys.argv[0] + " Pass arguments <nof_rep> <output.json>")
-#
-#nof_rep = sys.argv[1]
-#filename = sys.argv[4]
+outpath = "out/"
+pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
 
 scenarios = [# Filename                                thread block datasize repetition
              ("128-cg-kernels-1thread-same-elem.json",    1,    1,    128,      100),
@@ -42,7 +40,7 @@ for scenario in scenarios:
         print("Number of kernels: "+str(nof_kernel))
         print("Nof threads: "+str(nof_thread))
         print("-------------------------------")
-        process = Popen(["./random_walk", str(nof_thread), str(nof_block),str(nof_kernel), str(nof_rep), str(data_size) , "out.json"], stdout=PIPE)
+        process = Popen(["./sequential-walk", str(nof_thread), str(nof_block),str(nof_kernel), str(nof_rep), str(data_size) , "out.json"], stdout=PIPE)
         output = process.communicate()
         print(output)
 
@@ -66,5 +64,5 @@ for scenario in scenarios:
     agg_data['max'] = maxv
     agg_data['stdev'] = stdev
     agg_data['nof_kernels'] = kernel
-    with open(filename, 'w') as outfile:
+    with open(outpath+filename, 'w') as outfile:
         json.dump(agg_data, outfile)

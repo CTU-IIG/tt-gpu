@@ -27,7 +27,7 @@ target_build: deploy
 	ssh -t $(REMOTE_TARGET) "cd $(REMOTE_WORKING_DIR) && make clean && make all"
 
 target_run: target_build
-	ssh -t $(REMOTE_TARGET) "cd $(REMOTE_WORKING_DIR) && python3 run.py"
+	ssh -t $(REMOTE_TARGET) "cd $(REMOTE_WORKING_DIR) && export LD_BIND_NOW && python3 run.py"
 	rsync -avz ${REMOTE_TARGET}:${REMOTE_OUTPUT_DIR} .
 
 deploy:

@@ -101,7 +101,8 @@ static __global__ void sequentialWalk(kernel_param_t params) {
     oh = *params.targetMeasOH;
 
 
-    int tindex = blockDim.x*blockIdx.x*params.nof_repetitions + params.nof_repetitions *threadIdx.x;
+    int tindex = blockDim.x*blockIdx.x*params.nof_repetitions + params.nof_repetitions *threadIdx.x;    
+    int current_start = (blockDim.x*blockIdx.x + threadIdx.x)%params.buffer_length;
 
     // Warm up data cache    
     for(int i = 0; i < params.buffer_length; i++){
@@ -113,7 +114,7 @@ static __global__ void sequentialWalk(kernel_param_t params) {
 
         sum = 0;
         time_acc = 0;
-        current = (blockDim.x*blockIdx.x + threadIdx.x)%params.buffer_length;
+        current = current_start; 
 
         barrierWait(params.barrier, &local_sense);
         __syncthreads();
@@ -124,10 +125,8 @@ static __global__ void sequentialWalk(kernel_param_t params) {
         }
         time_end = clock();
         time_acc += (time_end - time_start);
-
-
-        *params.target_realSum = sum;
         __syncthreads();
+        *params.target_realSum = sum;
 
         // Do not write time for warm up iteration       
         if (i>=0){
@@ -145,7 +144,7 @@ static int initializeTest(param_t *params){
         perror("Failed allocating host buffer: ");
         return  -1;
     }
-    createSequentialArrayHost(params->hostBuffer, params->buffer_length);
+    createSequentialArrayHost(*params);
 
     //allocate device times
     int size_time = params->nof_repetitions \
