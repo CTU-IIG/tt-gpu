@@ -89,16 +89,17 @@ static __global__ void getMeasurementOverhead(param_t params) {
         sum +=j;
     }
     stop = clock();
-    *params.targetMeasOH = (stop-start)/params.buffer_length;
+    *params.targetMeasOH = ((unsigned int)(stop-start))/params.buffer_length;
     *params.target_realSum = sum;
 }
-
+/*
 static __global__ void randomWalkSameElement(param_t params) {
     int current;
     unsigned int time_start, time_end, time_acc;
     uint64_t sum;
 
     int tindex = blockDim.x*blockIdx.x*params.nof_repetitions + params.nof_repetitions *threadIdx.x;
+    int curr_start = blockIdx.x%params.buffer_length;
 
     // Warm up data cache    
     for(int i = 0; i < params.buffer_length; i++){
@@ -110,7 +111,7 @@ static __global__ void randomWalkSameElement(param_t params) {
 
         sum = 0;
         time_acc = 0;
-        current = blockIdx.x%params.buffer_length;
+        current = curr_start;
 
         __syncthreads();
         time_start = clock();
@@ -131,43 +132,48 @@ static __global__ void randomWalkSameElement(param_t params) {
         }
     }
 }
+*/
 
 static __global__ void randomWalkDiffElement(param_t params) {
     int current;
-    unsigned int time_start, time_end, time_acc;
+    unsigned int time_start, time_end;
+    unsigned int time_acc, oh;
     uint64_t sum;
+    oh = *(params.targetMeasOH);
 
     int tindex = blockDim.x*blockIdx.x*params.nof_repetitions + params.nof_repetitions *threadIdx.x;
+    int curr_start = (blockDim.x*blockIdx.x + threadIdx.x)%params.buffer_length;
 
     // Warm up data cache    
     for(int i = 0; i < params.buffer_length; i++){
         sum += params.targetBuffer[i%params.buffer_length];
     }
+    *params.target_realSum = sum;
 
     // Run experiment multiple times. First iteration (-1) is to warm up icache
-    for (int i = -1; i < params.nof_repetitions; i++){
+    for (int i = -2; i < params.nof_repetitions; i++){
 
         sum = 0;
         time_acc = 0;
-        current = (blockDim.x*blockIdx.x + threadIdx.x)%params.buffer_length;
+        current = curr_start;
 
         __syncthreads();
+
         time_start = clock();
         for(int j = 0; j < params.buffer_length; j++){
             current = params.targetBuffer[current];
             sum += current;
         }
         time_end = clock();
-        time_acc += (time_end - time_start);
-
-
-        *params.target_realSum = sum;
         __syncthreads();
+
+        time_acc = (unsigned int)(time_end - time_start);
+        *params.target_realSum = sum;
 
         // Do not write time for warm up iteration       
         if (i>=0){
             // Write element access time with measurement overhead
-            params.target_times[tindex+i] = time_acc/params.buffer_length-(*params.targetMeasOH);
+            params.target_times[tindex+i] = time_acc/(params.buffer_length)-oh;
         }
     }
 }
