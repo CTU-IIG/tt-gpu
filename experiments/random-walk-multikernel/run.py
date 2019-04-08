@@ -7,7 +7,7 @@ import pathlib
 
 outpath = "out/"
 pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
-executable = "./sequential-walk"
+executable = "./random-walk"
 
 
 scenarios = [# Filename                                thread block datasize repetition
@@ -66,5 +66,5 @@ for scenario in scenarios:
     agg_data['max'] = maxv
     agg_data['stdev'] = stdev
     agg_data['nof_kernels'] = kernel
-    with open(filename, 'w') as outfile:
+    with open(outpath+filename, 'w') as outfile:
         json.dump(agg_data, outfile)
