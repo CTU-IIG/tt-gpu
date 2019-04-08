@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-#define USE_PREM_PROF
+// #define USE_PREM_PROF
 
 typedef struct {
     int nofThreads;

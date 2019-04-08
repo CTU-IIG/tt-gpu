@@ -14,6 +14,7 @@ KERNELWISE_SYNC?=no
 SCHED_ALL_PHASES?=no
 WB_SHIFT_BACK ?=0
 USE_SCHED?=no
+PREM_PROF?=no
 
 ifeq ($(KERNELWISE_SYNC), no) 
 	KWS:=
@@ -33,6 +34,12 @@ else
 	PSA:= -DPREM_SCHEDULE_ALL_PHASES
 endif
 
+ifeq ($(PREM_PROF), no) 
+	PF:=
+else
+	PF:= -DUSE_PREM_PROF
+endif
+
 NVCCFLAGS := -Xptxas -O3 --ptxas-options=-v --compiler-options="$(CFLAGS)" \
 	--generate-code arch=compute_62,code=[compute_62,sm_62] \
 	--maxrregcount=32 -Xptxas -dlcm=$(cachemode) \
@@ -46,7 +53,7 @@ export PATH:=/usr/local/cuda/bin:$(PATH)
 all: $(EXE)
 
 $(EXE): main.c $(EXE).cu
-	nvcc $(NVCCFLAGS) -DPREM_PF_PHASE_OFFSET=$(PF_PHASEOFFSET) -DPREM_WB_PHASE_OFFSET=$(WB_PHASEOFFSET) $(KWS) $(SCHED) $(PSA) -DWB_SHIFT_BACK=$(WB_SHIFT_BACK) $^ -o $@
+	nvcc $(NVCCFLAGS) -DPREM_PF_PHASE_OFFSET=$(PF_PHASEOFFSET) -DPREM_WB_PHASE_OFFSET=$(WB_PHASEOFFSET) $(KWS) $(SCHED) $(PSA) $(PF) -DWB_SHIFT_BACK=$(WB_SHIFT_BACK) $^ -o $@
 
 target_build: deploy
 	ssh -t $(REMOTE_TARGET) "cd $(REMOTE_WORKING_DIR) && make clean && make all"

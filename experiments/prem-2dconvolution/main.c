@@ -99,7 +99,6 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-
     params.nof_repetitions = nof_repetitions;
 
     params.fd = NULL;

@@ -137,16 +137,16 @@ static __device__ __inline__ void spinUntil(uint64_t endTime){
 
 #ifdef SCHEDULE
 // Phase times manually evaluated
-#if 1
+#if 0
 #define PREM_PF_PHASE (2000)
 #define PREM_C_PHASE (700)
 #define PREM_WB_PHASE (500)
 #else
 
 // Phase times pessimistic
-#define PREM_PF_PHASE (3000)
-#define PREM_C_PHASE (1700)
-#define PREM_WB_PHASE (1500)
+#define PREM_PF_PHASE (4000)
+#define PREM_C_PHASE (2000)
+#define PREM_WB_PHASE (2000)
 #endif
 
 
@@ -198,8 +198,7 @@ static __device__ __inline__ void syncWriteBack(const uint64_t startTime, const 
 #define PREM_NJ_TILE_SIZE (PREM_SHM_SIZE/PREM_NI_TILE_SIZE)
 
 // Premification for datasets of size 512x512, 1024x1024 and 4096x4090
-static __global__ void convolution2D_kernelPREM(kernel_data_t data)
-{
+static __global__ void convolution2D_kernelPREM(kernel_data_t data){
     __shared__ float A_SHM[PREM_SHM_SIZE];
     __shared__ float B_SHM[PREM_SHM_SIZE];
 
@@ -224,18 +223,20 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
 #ifndef PREM_SCHEDULE_ALL_PHASES
 
 #ifdef KERNELWISE_SYNC
-    unsigned int reg_pftileoffset = ((data.nofKernel-1) * PREM_PF_PHASE_OFFSET) + (PREM_PF_PHASE + PREM_C_PHASE + PREM_WB_PHASE);
+    //unsigned int reg_pftileoffset = ((data.nofKernel-1) * PREM_PF_PHASE_OFFSET) + (PREM_PF_PHASE + PREM_C_PHASE + PREM_WB_PHASE);
+    unsigned int reg_pftileoffset = ((data.nofKernel) * PREM_PF_PHASE_OFFSET);
 #else
-    unsigned int reg_pftileoffset = (((data.nofKernel * gridDim.x)-1) * PREM_PF_PHASE_OFFSET) + (PREM_PF_PHASE + PREM_C_PHASE + PREM_WB_PHASE);
+    //unsigned int reg_pftileoffset = (((data.nofKernel * gridDim.x)-1) * PREM_PF_PHASE_OFFSET) + (PREM_PF_PHASE + PREM_C_PHASE + PREM_WB_PHASE);
+    unsigned int reg_pftileoffset = (((data.nofKernel * gridDim.x)) * PREM_PF_PHASE_OFFSET);
 #endif /*KERNELWISE_SYNC*/
 
 #else /*PREM_SCHEDULE_ALL_PHASES*/
 
 #ifdef KERNELWISE_SYNC
-    unsigned int reg_wbtileoffset = ((data.nofKernel-1) * PREM_PF_PHASE_OFFSET) + PREM_PF_PHASE;
+    unsigned int reg_wbtileoffset = ((data.nofKernel-1) * PREM_PF_PHASE_OFFSET) + PREM_PF_PHASE + PREM_C_PHASE;
     unsigned int reg_pftileoffset = reg_wbtileoffset + (((data.nofKernel-1) * PREM_WB_PHASE_OFFSET) + PREM_WB_PHASE);
 #else
-    unsigned int reg_wbtileoffset = (((data.nofKernel * gridDim.x)-1) * PREM_PF_PHASE_OFFSET) + PREM_PF_PHASE;
+    unsigned int reg_wbtileoffset = (((data.nofKernel * gridDim.x)-1) * PREM_PF_PHASE_OFFSET) + PREM_PF_PHASE + PREM_C_PHASE;
     unsigned int reg_pftileoffset = reg_wbtileoffset + ((((data.nofKernel * gridDim.x)-1) * PREM_WB_PHASE_OFFSET) + PREM_WB_PHASE);
 #endif /*KERNELWISE_SYNC*/
 
@@ -378,8 +379,7 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data)
 }
 
 
-static __global__ void convolution2D_kernelLegacy(kernel_data_t data)
-{
+static __global__ void convolution2D_kernelLegacy(kernel_data_t data){
     uint64_t start_time = getTime();
     if(threadIdx.x == 0){
         data.targetTimes[blockIdx.x*2] = start_time;
