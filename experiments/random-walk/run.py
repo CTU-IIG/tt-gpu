@@ -16,7 +16,8 @@ scenarios = [# Filename                    L1/L2  USE_SHMmake  cachemode prog
         ("ca-noshm-0-L1default.json", "ca",       "no",          0),
         ("ca-noshm-1-L1smaller.json", "ca",       "no",          1),
         ("ca-noshm-2-L1bigger.json",  "ca",       "no",          2),
-        ("ca-noshm-3-L1equal.json",   "ca",       "no",          3),
+        ("ca-noshm-3-L1equal.json",   "ca",       "no",          0),
+      #  ("ca-shm-walkhasshm-0-L1equal.json",   "ca",       "yes",0),
         ("ca-shm-0L1shared.json",     "ca",      "yes",          0)]
 
 for scenario in scenarios:
@@ -41,7 +42,7 @@ for scenario in scenarios:
     maxv = []
     size = []
 
-    for data_size in range(1,2,1):
+    for data_size in range(1,800,1):
         #for data_size in range(1,10,1):
         print("-------------------------------")
         print("Datasize: "+str(data_size))
@@ -70,5 +71,5 @@ for scenario in scenarios:
     agg_data['max'] = maxv
     agg_data['stdev'] = stdev
     agg_data['size'] = size
-    with open(filename, 'w') as outfile:
+    with open(outpath+filename, 'w') as outfile:
         json.dump(agg_data, outfile)

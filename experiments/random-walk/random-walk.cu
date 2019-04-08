@@ -89,8 +89,8 @@ static int createShuffledArray(uint32_t * buffer, size_t nofElem){
 	buffer[nofElem-1] = 0;
 
 	// Shuffle array	
-	for (size_t i = 0; i<nofElem;i++){
-		size_t rndi, tmp1, tmp2, tmp3; 
+	for (uint32_t i = 0; i<nofElem;i++){
+		uint32_t rndi, tmp1, tmp2, tmp3; 
 		rndi = random32()%nofElem;
 		if (rndi == i) continue;	
 
@@ -108,16 +108,16 @@ static int createShuffledArray(uint32_t * buffer, size_t nofElem){
 }
 
 static __global__ void getMeasurementOverhead(param_t params) {
-	unsigned int start, stop;
+	long long int start, stop;
 	uint64_t sum;
 
-	start = clock();
+	start = clock64();
 	for(int j = 0; j < params.buffer_length; j++){
 		sum += j;
 	}
-	stop = clock();
+	stop = clock64();
 
-	*params.targetMeasOH = (stop-start)/params.buffer_length;
+	*params.targetMeasOH = ((unsigned int)(stop-start))/params.buffer_length;
 	*params.target_realSum = sum;
 }
 
@@ -153,40 +153,43 @@ static __global__ void spinSHM(uint64_t spin_duration) {
 
 static __global__ void randomWalk(param_t params) {
 	uint32_t current;
-	clock_t time_start;
-	clock_t time_end;
-	clock_t time_acc;
+	long long int time_start, time_end;
+    unsigned int time_acc;
 	uint64_t sum;
-	clock_t oh = *params.targetMeasOH;
+	unsigned int oh = *params.targetMeasOH;
 
 	if (blockIdx.x != 0) return;
 	if (threadIdx.x != 0) return;
+#ifdef USE_SHARED
+	uint32_t shared_mem_res;
+	shared_mem_res = UseSharedMemory();
+#endif
 
 	// Warm up data cache    
-	for(size_t i = 0; i < params.buffer_length; i++){
-		sum += params.targetBuffer[i%params.buffer_length];
+	for(int i = 0; i < params.buffer_length; i++){
+		sum += params.targetBuffer[i];
 	}
 
 	// Run experiment multiple times. First iteration (-1) is to warm up icache
-	current = 0;
-	for (int i = -2; i < params.nof_repetitions; i++){
+	for (int i = -1; i < params.nof_repetitions; i++){
 		sum = 0;
 		time_acc = 0;
+	    current = 0;
 
-		time_start = clock();
+		time_start = clock64();
 		for(int j = 0; j < params.buffer_length; j++){
 			current = params.targetBuffer[current];
 			sum += current;
 		}
-		time_end = clock();
+		time_end = clock64();
 
-		time_acc = time_end - time_start;
+		time_acc = (unsigned int) time_end - time_start;
 		*params.target_realSum = sum;
 
 		// Do not write time for warm up iteration       
 		if (i>=0){
 			// Write element access time with measurement overhead
-			params.target_times[i] = (time_acc/params.buffer_length)-oh;
+			params.target_times[i] = (time_acc/(params.buffer_length))-oh;
 		}
 	}
 }
@@ -247,7 +250,7 @@ static int runTest(param_t *params){
 	spinSHM<<<1,1,0,stream[1]>>>(SPIN_DURATION);
 	spinSHM<<<1,1,0,stream[2]>>>(SPIN_DURATION);
 	spinSHM<<<1,1,0,stream[3]>>>(SPIN_DURATION);
-	spinSHM<<<1,1,0,stream[4]>>>(SPIN_DURATION);
+	//spinSHM<<<1,1,0,stream[4]>>>(SPIN_DURATION);
 	randomWalk<<<1,1,0,stream[0]>>>(*params);
 #else
 	randomWalk<<<1,1>>>(*params);
@@ -336,6 +339,8 @@ static int cleanUp(param_t *params){
 	// Free target buffers
 	cudaFree(params->targetBuffer);
 	cudaFree(params->target_times);
+	cudaFree(params->target_realSum);
+	cudaFree(params->targetMeasOH);
 
 	// Free host buffers
 	free(params->hostBuffer);
@@ -400,7 +405,7 @@ cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
 	if (CheckCUDAError(cudaSetDevice(DEVICE_NUMBER))) {
 		return EXIT_FAILURE;
 	}
-
+/*
 	// Set cache mode
 	if (CheckCUDAError(cudaDeviceSetCacheConfig(cacheMode))) {
 		return EXIT_FAILURE;
@@ -409,7 +414,7 @@ cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
 	if (CheckCUDAError(cudaFuncSetCacheConfig(randomWalk, cacheMode))) {
 		return EXIT_FAILURE;
 	}
-
+*/
 	// Initialize parameters
 	if (initializeTest(&params) < 0) return EXIT_FAILURE;
 
@@ -429,4 +434,3 @@ cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
 	cudaDeviceReset();
 	return 0;
 }
-

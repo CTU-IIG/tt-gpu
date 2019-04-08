@@ -17,9 +17,9 @@ endif
 
 
 NVCCFLAGS := -Xptxas -O3 --ptxas-options=-v --compiler-options="$(CFLAGS)" \
-	--generate-code arch=compute_62,code=[compute_62,sm_62] \
 	--generate-code arch=compute_53,code=[compute_53,sm_53] \
-	--maxrregcount=32 -Xptxas -dlcm=$(cachemode) \
+	--generate-code arch=compute_62,code=[compute_62,sm_62] \
+	-Xptxas -dlcm=$(cachemode) \
 
 #Export CUDA paths
 export LIBRARY_PATH:=/usr/local/cuda/lib64:$(LIBRARY_PATH)
