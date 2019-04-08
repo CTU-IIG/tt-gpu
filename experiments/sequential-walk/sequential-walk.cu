@@ -6,7 +6,6 @@
 #include <string.h>
 #include <time.h>
 #include <cuda_runtime.h>
-#include <cuda_profiler_api.h>
 
 #define DEVICE_NUMBER (0)
 //#define USE_SHARED
@@ -64,13 +63,6 @@ static __device__ inline uint64_t GlobalTimer64(void) {
 }
 #endif
 
-/*! \brief  Create random 32bit number
- *  \return returns random 32bit number
- *  Uses rand() function to create a random 32 bit number using two calls
- */
-static uint32_t random32(void){
-    return (rand() ^ (rand() << 15));
-}
 
 /*! \brief  Create a randomized array for random walks
  *  \param buffer Pointer to allocated memory segment
@@ -78,9 +70,6 @@ static uint32_t random32(void){
  *  \return returns error
  */
 static int createSequentialArray(uint32_t * buffer, size_t nofElem){
-
-    // Seed random
-    srand(time(0));
 
     // Link sequentially
     for(uint32_t i = 0; i< nofElem-1; i++){
@@ -91,17 +80,17 @@ static int createSequentialArray(uint32_t * buffer, size_t nofElem){
 }
 
 static __global__ void getMeasurementOverhead(param_t params) {
-    unsigned int start, stop;
+    long long int start, stop;
     uint64_t sum = 0; 
-    start = clock();
+    start = clock64();
 
     for(int j = 0; j < params.buffer_length; j++){
         sum += j;
     }
 
-    stop = clock();
+    stop = clock64();
 
-    *params.targetMeasOH = (stop-start)/params.buffer_length;
+    *params.targetMeasOH = ((clock_t)(stop-start))/params.buffer_length;
 }
 
 #ifdef USE_SHARED
@@ -136,8 +125,7 @@ static __global__ void spinSHM(uint64_t spin_duration) {
 
 static __global__ void sequentialWalk(param_t params) {
     uint32_t current;
-    clock_t time_start;
-    clock_t time_end;
+    long long int time_start, time_end;
     clock_t time_acc;
     uint64_t sum;
     clock_t oh = *params.targetMeasOH;
@@ -145,9 +133,14 @@ static __global__ void sequentialWalk(param_t params) {
     if (blockIdx.x != 0) return;
     if (threadIdx.x != 0) return;
 
+#ifdef USE_SHARED
+    uint32_t shared_mem_res;
+    shared_mem_res = UseSharedMemory();
+#endif
+
     // Warm up data cache    
-    for(size_t i = 0; i < params.buffer_length; i++){
-        sum += params.targetBuffer[i%params.buffer_length];
+    for(int i = 0; i < params.buffer_length; i++){
+        sum += params.targetBuffer[params.buffer_length];
     }
 
     // Run experiment multiple times. First iteration (-1) is to warm up icache
@@ -156,13 +149,13 @@ static __global__ void sequentialWalk(param_t params) {
         sum = 0;
         time_acc = 0;
 
-        time_start = clock();
+        time_start = clock64();
         for(int j = 0; j < params.buffer_length; j++){
             current = params.targetBuffer[current];
             sum += current;
         }
-        time_end = clock();
-		time_acc = time_end - time_start;
+        time_end = clock64();
+		time_acc = (clock_t)(time_end - time_start);
 
         *params.target_realSum = sum;
         
@@ -217,26 +210,29 @@ static int initializeTest(param_t *params){
 }
 
 static int runTest(param_t *params){
-    cudaProfilerStart();
     getMeasurementOverhead<<<1,1>>>(*params);
+
+    if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
+
 #ifdef USE_SHARED
 	cudaStream_t stream[5];
 	for (int i = 0; i < 5; ++i)
     	cudaStreamCreate(&stream[i]);
     // Get measurement overhead
-    if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
 
     // Launch kernel
     spinSHM<<<1,1,0,stream[1]>>>(SPIN_DURATION);
     spinSHM<<<1,1,0,stream[2]>>>(SPIN_DURATION);
     spinSHM<<<1,1,0,stream[3]>>>(SPIN_DURATION);
-    spinSHM<<<1,1,0,stream[4]>>>(SPIN_DURATION);
+    //spinSHM<<<1,1,0,stream[4]>>>(SPIN_DURATION);
     sequentialWalk<<<1,1,0,stream[0]>>>(*params);
 #else
     sequentialWalk<<<1,1>>>(*params);
 #endif
+
     // Synchronize with device
     if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
+
 #ifdef USE_SHARED
 	for (int i = 0; i < 5; ++i) 
     	cudaStreamDestroy(stream[i]);
@@ -261,7 +257,6 @@ static int runTest(param_t *params){
                     params->targetMeasOH, \
                     sizeof(uint32_t), \
                     cudaMemcpyDeviceToHost))) return -1;
-    cudaProfilerStop();
     return 0;
 }
 
@@ -319,6 +314,8 @@ static int cleanUp(param_t *params){
     // Free target buffers
     cudaFree(params->targetBuffer);
     cudaFree(params->target_times);
+    cudaFree(params->target_realSum);
+    cudaFree(params->targetMeasOH);
 
     // Free host buffers
     free(params->hostBuffer);
@@ -381,15 +378,6 @@ int main(int argc, char **argv) {
 
     // Set CUDA device
     if (CheckCUDAError(cudaSetDevice(DEVICE_NUMBER))) {
-        return EXIT_FAILURE;
-    }
-
-	// Set cache mode
-    if (CheckCUDAError(cudaDeviceSetCacheConfig(cacheMode))) {
-        return EXIT_FAILURE;
-    }
-
-    if (CheckCUDAError(cudaFuncSetCacheConfig(randomWalk, cacheMode))) {
         return EXIT_FAILURE;
     }
 

@@ -7,17 +7,18 @@ import pathlib
 
 outpath = "out/"
 pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
-executable="./random-walk"
+executable="./sequential-walk"
 
-nof_rep = 10
+nof_rep = 100
 
 scenarios = [# Filename                    L1/L2  USE_SHMmake  cachemode prog
-        ("cg-noshm-0-L2.json",        "cg",       "no",          0),
-        ("ca-noshm-0-L1default.json", "ca",       "no",          0),
-        ("ca-noshm-1-L1smaller.json", "ca",       "no",          1),
-        ("ca-noshm-2-L1bigger.json",  "ca",       "no",          2),
-        ("ca-noshm-3-L1equal.json",   "ca",       "no",          3),
-        ("ca-shm-0L1shared.json",     "ca",      "yes",          0)]
+            ("out/cg-noshm-0-L2.json",        "cg",       "no",          0),
+            ("out/ca-noshm-0-L1default.json", "ca",       "no",          0),
+            ("out/ca-noshm-1-L1smaller.json", "ca",       "no",          1)]
+            ("out/ca-noshm-2-L1bigger.json",  "ca",       "no",          2),
+            ("out/ca-noshm-3-L1equal.json",   "ca",       "no",          0),
+            ("out/ca-shm-walkhasshm-0-L1shared.json",     "ca",      "yes",          0),
+            ("out/ca-shm-0-L1shared.json",     "ca",      "yes",          0)]
 
 for scenario in scenarios:
     filename = scenario[0]
@@ -41,8 +42,7 @@ for scenario in scenarios:
     maxv = []
     size = []
 
-    for data_size in range(1,2,1):
-        #for data_size in range(1,10,1):
+    for data_size in range(1,1024,1):
         print("-------------------------------")
         print("Datasize: "+str(data_size))
         print("-------------------------------")
