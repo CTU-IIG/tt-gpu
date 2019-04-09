@@ -643,7 +643,7 @@ int runTest(param_t *params){
         // Get measurement startTime
         getStartTime<<<1,1>>>(*params);
 
-    if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
+        if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
         for(int kernel = 0; kernel < params->nofKernels; kernel++){
             threadData[kernel].cpu=kernel;
             threadData[kernel].nofThreads=params->nofThreads;

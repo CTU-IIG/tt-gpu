@@ -230,11 +230,15 @@ if __name__ == "__main__":
                 ]
 
 
-
+    #kernelsched PF
 #    showTimesAll(filenames1, titles1)
+    #tilesched PF
 #    showTimesAll(filenames2, titles2)
+    #kernelsched WB
 #    showTimesAll(filenames3, titles3)
+    #tilesched WB
 #    showTimesAll(filenames4, titles4)
+    #nosched 
     showTimesAll(filenames5, titles5)
 
     plt.tight_layout()
