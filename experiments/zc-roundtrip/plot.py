@@ -25,6 +25,7 @@ onewayavg = np.mean(oneWay)
 onewaymax =  np.max(oneWay)
 onewaymin =  np.min(oneWay)
 
+print("Oneway avg: {:f}, max: {:f} min: {:f}".format(onewayavg, onewaymax, onewaymin))
 
 rt1 = np.diff(times1)
 rt2 = np.diff(times2)
@@ -32,9 +33,7 @@ roundtrip = np.concatenate((rt1, rt2))
 rtavg = np.mean(roundtrip)
 rtmax = np.max(roundtrip)
 rtmin = np.min(roundtrip)
-print(rtavg)
-print(rtmax)
-print(rtmin)
+print("RT avg: {:f}, max: {:f} min: {:f}".format(rtavg, rtmax, rtmin))
 
 y = [onewayavg,rtavg]
 minerr = []
