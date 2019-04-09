@@ -145,10 +145,10 @@ if __name__ == "__main__":
 #            "data/512t-2b-4k-1024-prem-kernelsched-1100pfo.json",
 #            "data/512t-2b-4k-1024-prem-kernelsched-1200pfo.json",
             "data/512t-2b-4k-1024-prem-kernelsched-1300pfo.json",
-#            "tile-sched/512t-2b-4k-1024-prem-kernelsched-1400pfo.json",
-#            "tile-sched/512t-2b-4k-1024-prem-kernelsched-1500pfo.json",
-#            "tile-sched/512t-2b-4k-1024-prem-kernelsched-1600pfo.json",
-#            "tile-sched/512t-2b-4k-1024-prem-kernelsched-1700pfo.json",
+#            "data/512t-2b-4k-1024-prem-kernelsched-1400pfo.json",
+#            "data/512t-2b-4k-1024-prem-kernelsched-1500pfo.json",
+#            "data/512t-2b-4k-1024-prem-kernelsched-1600pfo.json",
+#            "data/512t-2b-4k-1024-prem-kernelsched-1700pfo.json",
                 ]
     
     showTimesAll(filenames1, titles1)
