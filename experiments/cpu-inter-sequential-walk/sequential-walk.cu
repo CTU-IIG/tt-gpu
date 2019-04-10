@@ -65,7 +65,7 @@ static __global__ void getMeasurementOverhead(kernel_param_t params) {
 }
 
 
-static __global__ void randomWalk(kernel_param_t params) {
+static __global__ void sequentialWalk(kernel_param_t params) {
 	uint32_t current;
 	unsigned int time_start, time_end;
     unsigned int time_acc;
@@ -181,7 +181,7 @@ int runTest(param_t *params){
 	getMeasurementOverhead<<<1,1>>>(*kernelParam);
 	if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
 
-	randomWalk<<<1,1>>>(*kernelParam);
+	sequentialWalk<<<1,1>>>(*kernelParam);
 	// Synchronize with device
 	if (CheckCUDAError(cudaDeviceSynchronize())) return -1;
 
