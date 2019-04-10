@@ -4,18 +4,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import cm
 
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+
 def drawCDF(labels, times, fig, title):
     ax = fig.add_subplot(1, 2, 1)
     for i, label in enumerate(labels):
         times_sorted = np.sort(times[i])
         # Normalize
         p = 1.0 * np.arange(len(times[i])) / (len(times[i])-1)
-        ax.plot(times_sorted,p, label=label)
+        ax.plot(times_sorted,p*100, label=label)
 
-    ax.set_ylabel("Probability")
+    ax.set_ylabel("$<=x$ [\%]")
     ax.set_xlabel("Time [ns]")
+    ax.grid(True)
 #    ax.legend(loc='upper left')
-    ax.set_title(title)
+    #ax.set_title(title)
 
 def drawHist(labels, times, fig, title):
     ax = fig.add_subplot(1, 2, 2)
@@ -24,8 +28,9 @@ def drawHist(labels, times, fig, title):
 
     ax.set_ylabel("Count")
     ax.set_xlabel("Time [ns]")
-    ax.legend(loc='upper left')
-    ax.set_title(title)
+    ax.legend(loc='upper right')
+    ax.grid(True)
+    #ax.set_title(title)
 
 
 def showTimesAll(filenames, titles):
@@ -52,15 +57,16 @@ def showTimesAll(filenames, titles):
 
         labels = ['prefetch', 'compute', 'writeback']
 
-        fig = plt.figure()
+        fig = plt.figure(figsize=[7.5,2])
         fig.suptitle("PREM phases - " + title)
         drawHist(labels, phases, fig, "Histogram")
         drawCDF(labels, phases, fig, "CDF")
+        fig.savefig(title.replace(" ","-").replace(',','')+".pdf", format='pdf', bbox_inches='tight')
 
 
 if __name__ == "__main__":
     titles1 = [
-            "Without warm-up 512 threads, 1 blocks, 1 kernel",
+            "512 threads, 1 block, 1 kernel",
             "Without warm-up 512 threads, 2 blocks, 1 kernel",
             "With warm-up 512 threads, 1 blocks, 1 kernel",
             "With warm-up 512 threads, 2 blocks, 1 kernel",

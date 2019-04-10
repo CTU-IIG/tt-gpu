@@ -3,6 +3,8 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import cm
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
 
 
 def splitStartEndTimes(blockTimes):
@@ -48,6 +50,7 @@ def drawBarGraph(labels, times, fig, title):
     minerr = []
     maxerr = []
     jitter_per = []
+    jitter_text = []
     centers_mean = np.arange(0,len(labels),1)
     centers_jitter = np.arange(0.425,len(labels),1)
     centers_labels = np.arange(0.425/2, len(labels),1)
@@ -61,16 +64,26 @@ def drawBarGraph(labels, times, fig, title):
         maxerr.append(maxv-mean)
         jitter = maxv-minv
         jitter_per.append((jitter/mean)*100)
+        jitter_text.append("{:.2f}\%".format((jitter/mean)*100))
         print("{:<30s}: mean: {:f}ms, min: {:f}ms, max: {:f}ms, jitter: {:f}ms".format(label, mean, minv, maxv, maxv-minv))
 
-    ax.bar(centers_mean, y, width=width, yerr=[minerr, maxerr], alpha =0.5, hatch='/',ecolor='r', capsize=5)#, yerr=menStd) 
+    handle1 = ax.bar(centers_mean, y, width=width, yerr=[minerr, maxerr], alpha =0.5, hatch='/',ecolor='r', capsize=5, label='Avg. time')#, yerr=menStd) 
+
+
     ax.set_ylabel("Average execution time [ms]")
     ax.set_xticks(centers_labels)
     ax.set_xticklabels(labels,rotation=45, ha='right')
     ax.set_title(title)
     ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
-    ax2.bar(centers_jitter, jitter_per, width=width,color='r', hatch='//', alpha=0.5)
-    ax2.set_ylabel("Jitter compared to average execution time [%]")
+    handle2 = ax2.bar(centers_jitter, jitter_per, width=width,color='r', hatch='//', alpha=0.5, label='Jitter in \%')
+
+    for i in range(len(centers_jitter)):
+        ax2.text(x = centers_jitter[i] , y = jitter_per[i]+0.1, s = jitter_text[i], size = 6, ha='center')
+
+    
+    ax2.set_ylabel("Jitter [\%]")
+    ax2.legend(handles=[handle1, handle2], loc='upper left')
+    ax.grid(True)
 
 def drawCDF(labels, times, fig, title):
     ax = fig.add_subplot(1, 2, 1)
@@ -114,20 +127,21 @@ def showTimesAll(filenames, titles):
     fig.suptitle("Kernel times")
     drawHist(titles, times_agg, fig, "Histogram")
     drawCDF(titles, times_agg, fig, "CDF")
-    fig = plt.figure()
-    drawBarGraph(titles, times_agg, fig, "Mean execution times")
+    fig = plt.figure(figsize=[6,3])
+    drawBarGraph(titles, times_agg, fig, "Average execution times")
+    fig.savefig('schedulecomparison.pdf', format='pdf', bbox_inches='tight')
 
 if __name__ == "__main__":
     titles1 = [
             "Legacy:1 kernel",
-            "Legacy:4 kernel",
-            "PREM:4 kernel, no scheduler",
+            "Legacy:4 kernels",
+            "Tiled:4 kernels, no scheduler",
 #            "PREM:4 kernel, 0ns offset",
 #            "PREM:4 kernel, 500ns offset",
 #            "PREM:4 kernel, 1000ns offset",
 #            "PREM:4 kernel, 1100ns offset",
 #            "PREM:4 kernel, 1200ns offset",
-            "PREM:4 kernel, 1300ns offset",
+            "Tiled:4 kernels, 1300ns offset",
 #            "PREM:4 kernel, 1400ns offset",
 #            "PREM:4 kernel, 1500ns offset",
 #            "PREM:4 kernel, 1600ns offset",
@@ -153,4 +167,4 @@ if __name__ == "__main__":
     
     showTimesAll(filenames1, titles1)
     plt.tight_layout()
-    plt.show()
+    #plt.show()
