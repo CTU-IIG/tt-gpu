@@ -92,6 +92,7 @@ static __global__ void getMeasurementOverhead(param_t params) {
     *params.targetMeasOH = ((unsigned int)(stop-start))/params.buffer_length;
     *params.target_realSum = sum;
 }
+
 /*
 static __global__ void randomWalkSameElement(param_t params) {
     int current;
