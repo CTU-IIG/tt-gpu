@@ -65,7 +65,7 @@ def drawBarGraph(labels, times, fig, title):
         jitter = maxv-minv
         jitter_per.append((jitter/mean)*100)
         jitter_text.append("{:.2f}\%".format((jitter/mean)*100))
-        print("{:<30s}: mean: {:f}ms, min: {:f}ms, max: {:f}ms, jitter: {:f}ms".format(label, mean, minv, maxv, maxv-minv))
+        print("{:<30s}: mean: {:f}ms, min: {:f}ms, max: {:f}ms, jitter: {:f}ms/{:f}%".format(label, mean, minv, maxv, maxv-minv, jitter_per[-1]))
 
     handle1 = ax.bar(centers_mean, y, width=width, yerr=[minerr, maxerr], alpha =0.5, hatch='/',ecolor='r', capsize=5, label='Avg. time')#, yerr=menStd) 
 
@@ -84,6 +84,7 @@ def drawBarGraph(labels, times, fig, title):
     ax2.set_ylabel("Jitter [\%]")
     ax2.legend(handles=[handle1, handle2], loc='upper left')
     ax.grid(True)
+    ax2.set_ylim(0,max(jitter_per)+0.5)
 
 def drawCDF(labels, times, fig, title):
     ax = fig.add_subplot(1, 2, 1)
@@ -127,7 +128,7 @@ def showTimesAll(filenames, titles):
     fig.suptitle("Kernel times")
     drawHist(titles, times_agg, fig, "Histogram")
     drawCDF(titles, times_agg, fig, "CDF")
-    fig = plt.figure(figsize=[6,3])
+    fig = plt.figure(figsize=[6,2])
     drawBarGraph(titles, times_agg, fig, "Average execution times")
     fig.savefig('schedulecomparison.pdf', format='pdf', bbox_inches='tight')
 
@@ -136,35 +137,35 @@ if __name__ == "__main__":
             "Legacy:1 kernel",
             "Legacy:4 kernels",
             "Tiled:4 kernels, no scheduler",
-#            "PREM:4 kernel, 0ns offset",
-#            "PREM:4 kernel, 500ns offset",
-#            "PREM:4 kernel, 1000ns offset",
-#            "PREM:4 kernel, 1100ns offset",
-#            "PREM:4 kernel, 1200ns offset",
-            "Tiled:4 kernels, 1300ns offset",
-#            "PREM:4 kernel, 1400ns offset",
-#            "PREM:4 kernel, 1500ns offset",
-#            "PREM:4 kernel, 1600ns offset",
-#            "PREM:4 kernel, 1700ns offset",
+    #        "PREM:4 kernel, 0 ns offset",
+    #        "PREM:4 kernel, 500n s offset",
+    #        "PREM:4 kernel, 1000 ns offset",
+    #        "PREM:4 kernel, 1100 ns offset",
+    #        "PREM:4 kernel, 1200 ns offset",
+            "Tiled:4 kernels, 1300 ns offset",
+            "Tiled:4 kernels, 1400 ns offset",
+    #        "PREM:4 kernel, 1500 ns offset",
+    #        "PREM:4 kernel, 1600 ns offset",
+    #        "PREM:4 kernel, 1700 ns offset",
     ]
 
 
     filenames1 = [
-            "data/512t-2b-1k-1024-legacy.json",
-            "data/512t-2b-4k-1024-legacy.json",
-            "data/512t-2b-4k-1024-prem-nosched.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-0pfo.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-500pfo.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-1000pfo.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-1100pfo.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-1200pfo.json",
-            "data/512t-2b-4k-1024-prem-kernelsched-1300pfo.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-1400pfo.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-1500pfo.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-1600pfo.json",
-#            "data/512t-2b-4k-1024-prem-kernelsched-1700pfo.json",
+            "out/512t-2b-1k-1024-legacy.json",
+            "out/512t-2b-4k-1024-legacy.json",
+            "out/512t-2b-4k-1024-prem-nosched.json",
+    #        "out/512t-2b-4k-1024-prem-kernelsched-0pfo.json",
+    #        "out/512t-2b-4k-1024-prem-kernelsched-500pfo.json",
+    #        "out/512t-2b-4k-1024-prem-kernelsched-1000pfo.json",
+    #        "out/512t-2b-4k-1024-prem-kernelsched-1100pfo.json",
+    #        "out/512t-2b-4k-1024-prem-kernelsched-1200pfo.json",
+            "out/512t-2b-4k-1024-prem-kernelsched-1300pfo.json",
+            "out/512t-2b-4k-1024-prem-kernelsched-1400pfo.json",
+    #        "out/512t-2b-4k-1024-prem-kernelsched-1500pfo.json",
+    #        "out/512t-2b-4k-1024-prem-kernelsched-1600pfo.json",
+    #        "out/512t-2b-4k-1024-prem-kernelsched-1700pfo.json",
                 ]
     
     showTimesAll(filenames1, titles1)
     plt.tight_layout()
-    #plt.show()
+    plt.show()
