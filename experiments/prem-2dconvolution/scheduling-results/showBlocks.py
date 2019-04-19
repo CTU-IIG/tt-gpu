@@ -28,7 +28,9 @@ class Block:
             #ax.fill_between([self.start, self.end], [thread_upper, thread_upper], [thread_lower, thread_lower], facecolor=colors[self.kernel], alpha=0.4, hatch=hatches[self.kernel],edgecolor='k',linewidth=1.0)
         else:
             # Print with prem intervals
-            ax.broken_barh(self.intervals, (thread_lower, thread_upper-thread_lower), facecolor=(colors[0],colors[1],colors[2]), alpha=0.4, hatch=hatches[self.kernel],edgecolor='k',linewidth=1.0)
+            ax.broken_barh(self.intervals, (thread_lower,
+                thread_upper-thread_lower), facecolor=('cornflowerblue',
+                'darkorange','limegreen'), alpha=0.4, hatch=hatches[self.kernel],edgecolor='k',linewidth=1.0)
 
         
         ax.text(self.start+(self.end-self.start)/2,thread_lower+(thread_upper-thread_lower)/2,"K:"+str(self.kernel)+":"+str(self.id),horizontalalignment='center',verticalalignment='center')
@@ -136,7 +138,7 @@ def adjustThreadOffset(agg_sm):
 
 
 def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
-    fig = plt.figure()
+    fig = plt.figure(figsize=[7,5.5])
     fig.suptitle("Blocks scheduled on SM's\n"+ title)
     colors = cm.get_cmap('viridis', 4).colors
     if len(agg_sm.keys()) < 2:
@@ -149,10 +151,12 @@ def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
             block.draw(ax, colors)
         ax.set_ylabel("NofThreads")
         ax.set_yticks(range(0,2049,512))
-        ax.set_xlim(0.001,0.00112)
-        ax.set_xlabel("Time [s]")
+        ax.set_xlim(0.000031*1e6,0.00005*1e6)
+        ax.set_xlabel("Time [us]")
         ax.set_title("SM "+str(i))
         ax.grid(True)
+    plt.subplots_adjust(hspace=0.4)
+    return fig
 
 
 def drawScenario(filename, title):
@@ -184,15 +188,15 @@ def drawScenario(filename, title):
 
     minTime = min(blockTimes)
     maxTime = max(blockTimes)
-    blockTimes= [(i-minTime)*1e-9 for i in blockTimes]
-    prefetchtimes= [(i-minTime)*1e-9 for i in prefetchtimes[:-1]]
-    computetimes= [(i-minTime)*1e-9 for i in computetimes[:-1]]
-    writebacktimes= [(i-minTime)*1e-9 for i in writebacktimes[:-1]]
+    blockTimes= [(i-minTime)*1e-3 for i in blockTimes]
+    prefetchtimes= [(i-minTime)*1e-3 for i in prefetchtimes[:-1]]
+    computetimes= [(i-minTime)*1e-3 for i in computetimes[:-1]]
+    writebacktimes= [(i-minTime)*1e-3 for i in writebacktimes[:-1]]
 
 
     agg_sm = assignBlocksToSM(nofKernel, nofBlocks, nofThreads, blockTimes, smids, nofRep, tileCount, prefetchtimes, computetimes, writebacktimes)
     adjustThreadOffset(agg_sm)
-    drawBlocks(agg_sm, nofKernel, minTime, maxTime, title)
+    return drawBlocks(agg_sm, nofKernel, minTime, maxTime, title)
 
 
 if __name__ == "__main__":
@@ -217,5 +221,5 @@ if __name__ == "__main__":
     ]
 
     for title, filename in zip(titles, filenames):
-        drawScenario(filename, title)
+        fig = drawScenario(filename, title)
     plt.show()
