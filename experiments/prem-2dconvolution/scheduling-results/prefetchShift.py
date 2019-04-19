@@ -52,23 +52,28 @@ def drawBarGraph(xlabels, labels, times, fig, title, times_stack=[]):
     maxerr = []
     jitter_per = []
     centers_mean = np.arange(0,len(xlabels),1)
+    jitter_text = []
+    maxax1 = 0
+    maxax2 = 0
     if len(times_stack) == len(times):
         centers_jitter = np.arange(0.425-0.1,len(xlabels),1)
         centers_jitter_stack = np.arange(0.425+0.1,len(xlabels),1)
         width_jitter = 0.2
-    else:
-        centers_jitter = np.arange(0.425,len(xlabels),1)
-        width_jitter = 0.4
+        err_offset = 0.1
 
-    centers_labels = np.arange(0.425/2, len(xlabels),1)
-    width = 0.4
-    handles = []
-
-    if len(times_stack) == len(times):
         y_stack = []
         minerr_stack = []
         maxerr_stack = []
         jitter_per_stack = []
+        jitter_text_stack = []
+    else:
+        centers_jitter = np.arange(0.425,len(xlabels),1)
+        width_jitter = 0.4
+        err_offset = 0
+
+    centers_labels = np.arange(0.425/2, len(xlabels),1)
+    width = 0.4
+    handles = []
 
     for i, label in enumerate(xlabels):
         mean = np.mean(times[i])
@@ -78,6 +83,7 @@ def drawBarGraph(xlabels, labels, times, fig, title, times_stack=[]):
         minerr.append(mean-minv)
         maxerr.append(maxv-mean)
         jitter = maxv-minv
+        maxax1 = max(maxax1, maxv)
 
         if len(times_stack) == len(times):
             mean_stack = np.mean(times_stack[i])
@@ -88,37 +94,62 @@ def drawBarGraph(xlabels, labels, times, fig, title, times_stack=[]):
             maxerr_stack.append(maxv-mean_stack)
             jitter_stack = maxv-minv
             jitter_per_stack.append((jitter_stack/(mean+mean_stack))*100)
+            jitter_text_stack.append("{:.2f}\%".format(jitter_per_stack[-1]))
+            maxax1 = max(maxax1, maxv)
+            maxax2 = max(maxax2, jitter_per_stack[-1])
+
             jitter_per.append((jitter/(mean+mean_stack))*100)
         else:
             jitter_per.append((jitter/mean)*100)
 
-    h = ax.bar(centers_mean, y, width=width, alpha =0.5, hatch='/', label=labels[0])
-    ax.errorbar(x=centers_mean-0.1, y=y, yerr=[minerr, maxerr], ecolor='r', capsize=5, fmt='rx')
+        maxax2 = max(maxax2, jitter_per[-1])
+        jitter_text.append("{:.2f}\%".format(jitter_per[-1]))
+
+
+    h = ax.bar(centers_mean, y, width=width, alpha =0.5, hatch='\\\\', label=labels[0])
+    ax.errorbar(x=centers_mean-err_offset, y=y, yerr=[minerr, maxerr], ecolor='r', capsize=5, fmt='r.')
     handles.append(h)
+    ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
+    h = ax2.bar(centers_jitter, jitter_per,
+            width=width_jitter,color='r', hatch='\\\\\\\\', alpha=0.5, label=labels[1])
+    handles.append(h)
+    ax2.set_ylabel("Jitter relative to\naverage execution time [\%]")
+    
+    # Write jitter bar text labels
+    for i in range(len(centers_jitter)):
+        ax2.text(x = centers_jitter[i] , y = jitter_per[i], s = jitter_text[i], size = 8, va='bottom', ha='center', rotation=90)
+
+    if len(times_stack) == len(times):
+        for i in range(len(centers_jitter_stack)):
+            ax2.text(x = centers_jitter_stack[i] , y = jitter_per_stack[i], s = jitter_text_stack[i], size = 8, va='bottom', ha='center', rotation=90)
+
+        h = ax.bar(centers_mean, y_stack, width=width, bottom=y, alpha =0.5, hatch='//',  label=labels[2])
+        handles.append(h)
+        ax.errorbar(x=centers_mean+err_offset, y=[i+j for i,j in zip(y,y_stack)], yerr=[minerr_stack, maxerr_stack], ecolor='g', capsize=5, fmt='g.')
+        h = ax2.bar(centers_jitter_stack, jitter_per_stack,
+                width=width_jitter, color='g', hatch='////', alpha=0.5, label=labels[3])
+        handles.append(h)
+
+
+    # Set axis properties
     ax.set_ylabel("Average execution time [ns]")
     ax.set_xticks(centers_labels)
     ax.set_xticklabels(xlabels,rotation=45, ha='right')
-    ax.set_title(title)
-    ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
-    h = ax2.bar(centers_jitter, jitter_per, width=width_jitter,color='r', hatch='\\\\', alpha=0.5, label=labels[1])
-    handles.append(h)
-    ax2.set_ylabel("Jitter relative to average execution time [\%]")
+    #ax.set_title(title)
 
+    #ax.set_ylim(0,maxax1+75)
+    ax2.set_ylim(0,maxax2+75)
 
-    if len(times_stack) == len(times):
-       # err_kw_stack['y']= y + y_stack
-        h = ax.bar(centers_mean, y_stack, width=width, bottom=y, alpha =0.5, hatch='/',  label=labels[2])
-        handles.append(h)
-        ax.errorbar(x=centers_mean+0.1, y=[i+j for i,j in zip(y,y_stack)], yerr=[minerr_stack, maxerr_stack], ecolor='g', capsize=5, fmt='gx')
-        h = ax2.bar(centers_jitter_stack, jitter_per_stack, width=width_jitter, color='g', hatch='//', alpha=0.5, label=labels[3])
-        handles.append(h)
-    ax.legend(handles=handles)
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    ax.legend(handles=handles, loc='lower left', fontsize=8,  bbox_to_anchor=(0,1.02,1,0.2), mode= "expand", borderaxespad=0, ncol=4)
     ax.grid(True)
 
 def drawCDF(labels, times, fig, title, nofPlots=2):
     ax = fig.add_subplot(1, nofPlots, 1)
     for i, label in enumerate(labels):
         times_sorted = np.sort(times[i])
+        print("{:<10s} WCET: {:f}".format(label, np.max(times[i])))
         # Normalize
         p = 1.0 * np.arange(len(times[i])) / (len(times[i])-1)
         ax.plot(times_sorted,p, label=label)
@@ -166,11 +197,11 @@ def showTimesAll(filenames, titles, mergePhaseCDF=False):
         c_agg.append(computeTimes)
         wb_agg.append(writebackTimes)
 
-    fig = plt.figure(figsize=[7,2])
+    fig = plt.figure()
     fig.suptitle("Prefetch times")
     drawHist(titles, pf_agg, fig, "Histogram")
     drawCDF(titles, pf_agg, fig, "CDF")
-    fig = plt.figure()
+    fig = plt.figure(figsize=[7,2])
     labels = ['Prefetch time', 'Prefetch jitter', 'Compute time', 'Compute jitter']
     drawBarGraph(titles, labels, pf_agg, fig, "Prefetch times", c_agg)
     fig.savefig('phaseshift-prefetch.pdf', format='pdf', bbox_inches='tight')
@@ -187,7 +218,7 @@ def showTimesAll(filenames, titles, mergePhaseCDF=False):
     fig.suptitle("Writeback times")
     drawHist(titles, wb_agg, fig, "Histogram")
     drawCDF(titles, wb_agg, fig, "CDF")
-    fig = plt.figure()
+    fig = plt.figure(figsize=[7,2])
     labels = ['Writeback time', 'Writeback jitter']
     drawBarGraph(titles, labels, wb_agg, fig, "Writeback times")
     fig.savefig('phaseshift-writeback.pdf', format='pdf', bbox_inches='tight')
@@ -289,13 +320,13 @@ if __name__ == "__main__":
 
 
     #kernelsched PF
-#    showTimesAll(filenames1, titles1)
+    showTimesAll(filenames1, titles1)
     #tilesched PF
 #    showTimesAll(filenames2, titles2)
     #kernelsched WB
 #    showTimesAll(filenames3, titles3)
     #tilesched WB
-    showTimesAll(filenames4, titles4)
+#    showTimesAll(filenames4, titles4)
     #nosched 
 #    showTimesAll(filenames5, titles5, mergePhaseCDF=True)
 
