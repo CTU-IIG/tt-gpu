@@ -139,7 +139,7 @@ def adjustThreadOffset(agg_sm):
 
 def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
     fig = plt.figure(figsize=[7,5.5])
-    fig.suptitle("Blocks scheduled on SM's\n"+ title)
+#    fig.suptitle("Blocks scheduled on SM's\n"+ title)
     colors = cm.get_cmap('viridis', 4).colors
     if len(agg_sm.keys()) < 2:
         # add dummy key

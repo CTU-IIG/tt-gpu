@@ -39,7 +39,7 @@ def plot(dataus, datans, figsize=[7,2], labels=['Original', 'Nvprof B0', 'Nvprof
     ax1[1].hist(diffsns, alpha=0.5, color='b', hatch='\\\\', bins=bins)
     ax1[1].hist(diffsnsb1, alpha=0.5, color='g', hatch='\\\\////', bins=bins)
 
-    fig1.suptitle("Globaltimer resolution")
+#    fig1.suptitle("Globaltimer resolution")
     ax1[0].grid(True, which="both")
     ax1[0].set_ylabel('Time [ns]')
     ax1[0].set_xlabel('Iterations')
