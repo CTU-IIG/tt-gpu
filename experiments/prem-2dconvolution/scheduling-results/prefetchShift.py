@@ -102,7 +102,7 @@ def drawBarGraph(xlabels, labels, times, fig, title, times_stack=[]):
     ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
     h = ax2.bar(centers_jitter, jitter_per, width=width_jitter,color='r', hatch='\\\\', alpha=0.5, label=labels[1])
     handles.append(h)
-    ax2.set_ylabel("Jitter compared to average execution time [\%]")
+    ax2.set_ylabel("Jitter relative to average execution time [\%]")
 
 
     if len(times_stack) == len(times):
@@ -204,12 +204,12 @@ def showTimesAll(filenames, titles, mergePhaseCDF=False):
 
 if __name__ == "__main__":
     titles1 = [
-            "0ns",
-            "500ns",
-            "1000ns",
-            "1500ns",
-            "2000ns",
-            "3000ns",
+            "0 ns",
+            "500 ns",
+            "1000 ns",
+            "1500 ns",
+            "2000 ns",
+            "3000 ns",
     ]
 
     filenames1 = [
@@ -223,12 +223,12 @@ if __name__ == "__main__":
                 ]
     
     titles2 = [
-            "0ns",
-            "500ns",
-            "1000ns",
-            "1500ns",
-            "2000ns",
-            "3000ns",
+            "0 ns",
+            "500 ns",
+            "1000 ns",
+            "1500 ns",
+            "2000 ns",
+            "3000 ns",
     ]
 
     filenames2 = [
@@ -242,12 +242,12 @@ if __name__ == "__main__":
                 ]
 
     titles3 = [
-            "0ns",
-            "200ns",
-            "400ns",
-            "600ns",
-            "800ns",
-            "1000ns",
+            "0 ns",
+            "200 ns",
+            "400 ns",
+            "600 ns",
+            "800 ns",
+            "1000 ns",
     ]
 
     filenames3 = [
@@ -261,12 +261,12 @@ if __name__ == "__main__":
 
 
     titles4 = [
-            "0ns",
-            "200ns",
-            "400ns",
-            "600ns",
-            "800ns",
-            "1000ns",
+            "0 ns",
+            "200 ns",
+            "400 ns",
+            "600 ns",
+            "800 ns",
+            "1000 ns",
     ]
 
     filenames4 = [
