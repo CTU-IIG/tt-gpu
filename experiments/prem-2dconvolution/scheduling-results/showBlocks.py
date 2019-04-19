@@ -138,7 +138,7 @@ def adjustThreadOffset(agg_sm):
 
 
 def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
-    fig = plt.figure(figsize=[7,5.5])
+    fig = plt.figure(figsize=[7,2.5])
 #    fig.suptitle("Blocks scheduled on SM's\n"+ title)
     colors = cm.get_cmap('viridis', 4).colors
     if len(agg_sm.keys()) < 2:
@@ -150,12 +150,15 @@ def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
         for block in agg_sm[sm]:
             block.draw(ax, colors)
         ax.set_ylabel("NofThreads")
+        if sm == 0:
+            ax.set_xticks([])
         ax.set_yticks(range(0,2049,512))
         ax.set_xlim(0.000031*1e6,0.00005*1e6)
-        ax.set_xlabel("Time [us]")
+        if sm == 1:
+            ax.set_xlabel("Time [us]")
         ax.set_title("SM "+str(i))
         ax.grid(True)
-    plt.subplots_adjust(hspace=0.4)
+    plt.subplots_adjust(hspace=0.4, bottom=0.18)
     return fig
 
 
