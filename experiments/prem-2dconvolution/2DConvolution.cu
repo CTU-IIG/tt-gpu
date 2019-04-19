@@ -332,7 +332,11 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data){
 
 #ifdef USE_PREM_PROF
             if(threadIdx.x == 0){
+#ifdef PREM_SCHEDULE_ALL_PHASES
                 reg_prof_wb_start = getTime();
+#else
+                reg_prof_wb_start = reg_prof_c_end;
+#endif /*PREM_SCHEDULE_ONE_PHASE*/
             }
 #endif /*USE_PREM_PROF*/
 
@@ -380,6 +384,11 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data){
 
 
 static __global__ void convolution2D_kernelLegacy(kernel_data_t data){
+    uint64_t reg_startTime = *data.startTime;
+   
+    // Spin until PREM schedule start time 
+    spinUntil(reg_startTime);
+
     uint64_t start_time = getTime();
     if(threadIdx.x == 0){
         data.targetTimes[blockIdx.x*2] = start_time;

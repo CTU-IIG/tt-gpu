@@ -2,7 +2,7 @@
 HOST ?= tx2fk
 EXE=2DConvolution
 REMOTE_TARGET = nvidia@$(HOST)
-REMOTE_WORKING_DIR = ~/cpu-inter-convolution
+REMOTE_WORKING_DIR = ~/prem-2dconvolution
 REMOTE_OUTPUT_DIR ?=$(REMOTE_WORKING_DIR)/out
 CFLAGS := -Wall -Werror -O3 -lpthread -lrt 
 
