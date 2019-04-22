@@ -70,9 +70,9 @@ def drawBarGraph(labels, times, fig, title):
     handle1 = ax.bar(centers_mean, y, width=width, yerr=[minerr, maxerr], alpha =0.5, hatch='/',ecolor='r', capsize=5, label='Avg. time')#, yerr=menStd) 
 
 
-    ax.set_ylabel("Average execution time [ms]")
+    ax.set_ylabel("Avg. execution time [ms]")
     ax.set_xticks(centers_labels)
-    ax.set_xticklabels(labels,rotation=25, ha='right')
+    ax.set_xticklabels(labels,rotation=20, ha='right')
 #    ax.set_title(title)
     ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
     handle2 = ax2.bar(centers_jitter, jitter_per, width=width,color='r', hatch='//', alpha=0.5, label='Jitter in \%')
