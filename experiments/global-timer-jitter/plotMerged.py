@@ -15,7 +15,7 @@ with open(file1) as f1:
 with open(file2) as f2:
     datans = json.load(f2)
 
-def plot(dataus, datans, figsize=[7,2], labels=['Original', 'Nvprof B0', 'Nvprof B1']):
+def plot(dataus, datans, figsize=[7,2], labels=['Default', 'Nvprof B0', 'Nvprof B1']):
     fig1, ax1 = plt.subplots(1,2,figsize=figsize)
 
     timesus = np.array(dataus['times']['0'])
