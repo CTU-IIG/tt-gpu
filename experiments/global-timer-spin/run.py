@@ -16,12 +16,6 @@ scenarios = [# Filename dummy
 for scenario in scenarios:
     filename = scenario[0]
 
-#    mean = []
-#    median = []
-#    stdev = []
-#    minv = []
-#    maxv = []
-#    size = []
     times={}
     differences={}
     smid={}

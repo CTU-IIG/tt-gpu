@@ -10,10 +10,9 @@
 
 #define DEVICE_NUMBER (0)
 
-#define NOF_STAMPS    (4096) //(6144) // 49152bytes of shm 
+#define NOF_STAMPS    (4096) //32kBytes for uint64_t
 #define NOF_BLOCKS    (4)
 #define SPIN() // spin(10000)
-
 
 typedef struct {
     uint64_t *targetTimes;
