@@ -24,7 +24,6 @@ __attribute__((always_inline)) inline uint32_t random32(void){
     return (uint32_t)lrand48();
 }
 
-
 int interference_random(volatile uint32_t *finishInference, volatile uint32_t *startInf){
     elem_t *src;
     elem_t *dst;

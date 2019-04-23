@@ -42,9 +42,11 @@ static int InternalCheckCUDAError(cudaError_t result, const char *fn,
 
 static void createSequentialArrayHost(param_t params){
     // Link sequentially
-    for(int i = 0; i < params.buffer_length; i++){
-        params.hostBuffer[i]=(i+params.nofThreads*params.nofBlocks)%params.buffer_length;
+    for(int i = 0; i < params.buffer_length-1; i++){
+        //params.hostBuffer[i]=(i+params.nofThreads*params.nofBlocks)%params.buffer_length;
+        params.hostBuffer[i]=i+1;
     }
+    params.hostBuffer[params.buffer_length-1]=0;
 }
 
 static __global__ void getMeasurementOverhead(param_t params) {
@@ -95,11 +97,11 @@ static __global__ void sequentialWalk(kernel_param_t params) {
     }
 
     // Run experiment multiple times. First iteration (-1) is to warm up icache
-    for (int i = -2; i < params.nof_repetitions; i++){
+    for (int i = -1; i < params.nof_repetitions; i++){
 
         sum = 0;
         time_acc = 0;
-        current = current_start; 
+        current = blockIdx.x;//current_start; 
 
         barrierWait(params.barrier, &local_sense);
         __syncthreads();
@@ -109,14 +111,14 @@ static __global__ void sequentialWalk(kernel_param_t params) {
             sum += current;
         }
         time_end = clock();
-        time_acc += (time_end - time_start);
+        time_acc = (time_end - time_start);
         __syncthreads();
         *params.target_realSum = sum;
 
         // Do not write time for warm up iteration       
         if (i>=0){
             // Write element access time with measurement overhead
-            params.target_times[tindex+i] = time_acc/params.buffer_length-oh;
+            params.target_times[tindex+i] = time_acc/params.buffer_length;
         }
     }
 }
@@ -210,7 +212,6 @@ int runTest(param_t *params){
 
     for (int i = 0; i < params->nofKernel; ++i){
         // Launch kernel
-        //randomWalkDiffElement<<<params->nofBlocks,params->nofThreads, 0, kernelp[i].stream>>>(kernelp[i]);
         sequentialWalk<<<params->nofBlocks,params->nofThreads, 0, kernelp[i].stream>>>(kernelp[i]);
     }
 

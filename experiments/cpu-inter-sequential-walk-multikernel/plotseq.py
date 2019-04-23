@@ -80,37 +80,37 @@ max9 = np.array(data9['max'])/scale
 fig = plt.figure(figsize=[7,3])
 
 # red dashes, blue squares and green triangles
-#plt.plot(data1['nof_kernels'], d1,'r',marker='1')
+plt.plot(data1['nof_kernels'], d1,'r',marker='1')
 plt.plot(data2['nof_kernels'], d2,'r',marker='2')
-#plt.plot(data3['nof_kernels'], d3,'b',marker='3')
-#plt.plot(data4['nof_kernels'], d4,'c',marker='4')
+plt.plot(data3['nof_kernels'], d3,'b',marker='3')
+plt.plot(data4['nof_kernels'], d4,'c',marker='4')
 plt.plot(data5['nof_kernels'], d5,'b',marker='*')
-#plt.plot(data6['nof_kernels'], d6,'k',marker='+')
-#plt.plot(data7['nof_kernels'], d7,'y',marker='x')
+plt.plot(data6['nof_kernels'], d6,'k',marker='+')
+plt.plot(data7['nof_kernels'], d7,'y',marker='x')
 plt.plot(data8['nof_kernels'], d8,'g',marker='|')
-#plt.plot(data9['nof_kernels'], d9,'brown',marker='v')
+plt.plot(data9['nof_kernels'], d9,'brown',marker='v')
 
 plt.gca().legend((
-                 # '512kB, 1 threads',\
+                  '512kB, 1 threads',\
                   '512kB, 32 threads per kernel',\
-                 # '512kB, 128 threads',\
-                 # '256kB, 1 threads',\
+                  '512kB, 128 threads',\
+                  '256kB, 1 threads',\
                   '256kB, 32 threads per kernel',\
-                 # '256kB, 128 threads',\
-                 # '128kB, 1 threads',\
+                  '256kB, 128 threads',\
+                  '128kB, 1 threads',\
                   '128kB, 32 threads per kernel',\
-                 # '128kB, 128 threads',
+                  '128kB, 128 threads',
                  ), loc='lower right')
 
-#plt.fill_between(data1['nof_kernels'], min1, max1, facecolor='red', alpha=0.5)
+plt.fill_between(data1['nof_kernels'], min1, max1, facecolor='red', alpha=0.5)
 plt.fill_between(data2['nof_kernels'], min2, max2, facecolor='r', alpha=0.5)
-#plt.fill_between(data3['nof_kernels'], min3, max3, facecolor='blue', alpha=0.5)
-#plt.fill_between(data4['nof_kernels'], min4, max4, facecolor='cyan', alpha=0.5)
+plt.fill_between(data3['nof_kernels'], min3, max3, facecolor='blue', alpha=0.5)
+plt.fill_between(data4['nof_kernels'], min4, max4, facecolor='cyan', alpha=0.5)
 plt.fill_between(data5['nof_kernels'], min5, max5, facecolor='b', alpha=0.5)
-#plt.fill_between(data6['nof_kernels'], min6, max6, facecolor='black', alpha=0.5)
-#plt.fill_between(data7['nof_kernels'], min7, max7, facecolor='yellow', alpha=0.5)
+plt.fill_between(data6['nof_kernels'], min6, max6, facecolor='black', alpha=0.5)
+plt.fill_between(data7['nof_kernels'], min7, max7, facecolor='yellow', alpha=0.5)
 plt.fill_between(data8['nof_kernels'], min8, max8, facecolor='g', alpha=0.5)
-#plt.fill_between(data9['nof_kernels'], min9, max9, facecolor='brown', alpha=0.5)
+plt.fill_between(data9['nof_kernels'], min9, max9, facecolor='brown', alpha=0.5)
 
 plt.grid(True, which="both")
 plt.title('Sequential walk with multiple kernels - sequential CPU interference')

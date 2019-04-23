@@ -8,20 +8,21 @@ import pathlib
 outpath = "out/"
 pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
 
-inter = "1" # 0 = rnd, 1= seq
+inter = "0" # 0 = rnd, 1= seq
 
 scenarios = [# Filename                                thread block datasize repetition
              ("128-cg-kernels-1thread-same-elem.json",    1,    1,    128,      10),
              ("128-cg-kernels-32thread-same-elem.json",  32,    1,    128,      10),
-             ("128-cg-kernels-128thread-same-elem.json",128,    1,    128,      10),
+             ("128-cg-kernels-128thread-same-elem.json",256,    1,    128,      10),
 
              ("256-cg-kernels-1thread-same-elem.json",    1,    1,    256,      10),
-             ("256-cg-kernels-32thread-same-elem.json",  32,    1,    256,      10),
-             ("256-cg-kernels-128thread-same-elem.json",128,    1,    256,      10),
+            ("256-cg-kernels-32thread-same-elem.json",  32,    1,    256,      10),
+             ("256-cg-kernels-128thread-same-elem.json",256,    1,    256,      10),
 
              ("512-cg-kernels-1thread-same-elem.json",    1,    1,    512,      10),
-             ("512-cg-kernels-32thread-same-elem.json",  32,    1,    512,      10),
-             ("512-cg-kernels-128thread-same-elem.json",128,    1,    512,      10)]
+            ("512-cg-kernels-32thread-same-elem.json",  32,    1,    512,      10),
+             ("512-cg-kernels-128thread-same-elem.json",256,    1,   512,      10)
+]
 
              
 for scenario in scenarios:
