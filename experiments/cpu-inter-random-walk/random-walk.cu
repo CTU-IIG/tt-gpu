@@ -91,7 +91,6 @@ static __global__ void getMeasurementOverhead(kernel_param_t params) {
 	*params.target_realSum = sum;
 }
 
-
 static __global__ void randomWalk(kernel_param_t params) {
 	uint32_t current;
 	unsigned int time_start, time_end;

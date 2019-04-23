@@ -5,7 +5,6 @@ import numpy as np
 
 outdir = 'out/'
 
-
 file1=outdir+'nozc-no-randwalk.json'
 file2=outdir+'nozc-rnd-randwalk.json'
 file3=outdir+'nozc-seq-randwalk.json'
