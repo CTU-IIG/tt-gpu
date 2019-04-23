@@ -15,7 +15,6 @@ else
 	SHM:=-DUSE_SHARED
 endif
 
-
 NVCCFLAGS := -Xptxas -O3 --ptxas-options=-v --compiler-options="$(CFLAGS)" \
 	--generate-code arch=compute_53,code=[compute_53,sm_53] \
 	--generate-code arch=compute_62,code=[compute_62,sm_62] \

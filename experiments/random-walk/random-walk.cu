@@ -42,25 +42,10 @@ static int InternalCheckCUDAError(cudaError_t result, const char *fn,
 	return -1;
 }
 #ifdef USE_SHARED
-// Returns the value of CUDA's global nanosecond timer.
 static __device__ inline uint64_t GlobalTimer64(void) {
-	// Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
-	// around after the upper bits have already been read. Work around this by
-	// reading the high bits a second time. Use the second value to detect a
-	// rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
-	// would be valid, it's passed over during the duration of the reading. If no
-	// rollover occurred, just return the initial reading.
-	volatile uint64_t first_reading;
-	volatile uint32_t second_reading;
-	uint32_t high_bits_first;
-	asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
-	high_bits_first = first_reading >> 32;
-	asm volatile("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
-	if (high_bits_first == second_reading) {
-		return first_reading;
-	}
-	// Return the value with the updated high bits, but the low bits set to 0.
-	return ((uint64_t) second_reading) << 32;
+	volatile uint64_t val;
+	asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(val));
+	return first_reading;
 }
 #endif
 
@@ -134,16 +119,12 @@ static __device__ uint32_t UseSharedMemory(void) {
 	return shared_mem_arr[threadIdx.x * elts_per_thread];
 }
 
-// Accesses shared memory and spins in a loop until at least
-// spin_duration nanoseconds have elapsed.
+/ spin_duration nanoseconds have elapsed.
 static __global__ void spinSHM(uint64_t spin_duration) {
 	uint32_t shared_mem_res;
 	uint64_t start_time = GlobalTimer64();
 
-	// In the shared memory loop, set the value for a window of elements.
 	shared_mem_res = UseSharedMemory();
-	// The actual spin loop--most of this kernel code is for recording block and
-	// kernel times.
 	while ((GlobalTimer64() - start_time) < spin_duration) {
 		continue;
 	}
@@ -405,7 +386,6 @@ cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
 	if (CheckCUDAError(cudaSetDevice(DEVICE_NUMBER))) {
 		return EXIT_FAILURE;
 	}
-/*
 	// Set cache mode
 	if (CheckCUDAError(cudaDeviceSetCacheConfig(cacheMode))) {
 		return EXIT_FAILURE;
@@ -414,7 +394,7 @@ cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
 	if (CheckCUDAError(cudaFuncSetCacheConfig(randomWalk, cacheMode))) {
 		return EXIT_FAILURE;
 	}
-*/
+
 	// Initialize parameters
 	if (initializeTest(&params) < 0) return EXIT_FAILURE;
 

@@ -31,6 +31,7 @@ with open(filename7) as f7:
     data7 = json.load(f7)
 with open(filename8) as f8:
     data8 = json.load(f8)
+
 d1 = np.array(data1['mean'])
 d2 = np.array(data2['mean'])
 d3 = np.array(data3['mean'])
@@ -70,35 +71,28 @@ max8 = np.array(data8['max'])/scale
 
 # red dashes, blue squares and green triangles
 fig = plt.figure(figsize=[6,3])
-#plt.plot(data1['nof_threads'], d1,'r')
-plt.plot(data2['nof_threads'], d2,'g')
-plt.plot(data3['nof_threads'], d3,'b')
-plt.plot(data4['nof_threads'], d4,'c')
-plt.plot(data5['nof_threads'], d5,'m')
-plt.plot(data6['nof_threads'], d6,'k')
-plt.plot(data7['nof_threads'], d7,'y')
-plt.plot(data8['nof_threads'], d8,'k')
-plt.gca().legend((
-                  #'1k',\
-                  '2k',\
-                  '3k',\
-                  '12k',\
-                  '16k',\
-                  '64k',\
-                  '128',\
-                  '256'))
+#plt.plot(data1['nof_threads'], d1,'r', label='1k')
+plt.plot(data2['nof_threads'], d2,'g', linewidth=0.75, label='2k')
+plt.plot(data3['nof_threads'], d3,'b', linewidth=0.75, label='3k')
+plt.plot(data4['nof_threads'], d4,'c', linewidth=0.75, label='12k')
+plt.plot(data5['nof_threads'], d5,'m', linewidth=0.75, label='16k')
+plt.plot(data6['nof_threads'], d6,'k', linewidth=0.75, label='64k')
+plt.plot(data7['nof_threads'], d7,'y', linewidth=0.75, label='128k')
+plt.plot(data8['nof_threads'], d8,'k', linewidth=0.75, label='256k')
+handles, labels = plt.gca().get_legend_handles_labels()
+plt.gca().legend(handles[::-1], labels[::-1])
 #plt.fill_between(data1['nof_threads'], min1, max1, facecolor='red', alpha=0.5)
-plt.fill_between(data2['nof_threads'], min2, max2, facecolor='green', alpha=0.5)
-plt.fill_between(data3['nof_threads'], min3, max3, facecolor='blue', alpha=0.5)
-plt.fill_between(data4['nof_threads'], min4, max4, facecolor='cyan', alpha=0.5)
-plt.fill_between(data5['nof_threads'], min5, max5, facecolor='magenta', alpha=0.5)
-plt.fill_between(data6['nof_threads'], min6, max6, facecolor='black', alpha=0.5)
-plt.fill_between(data7['nof_threads'], min7, max7, facecolor='yellow', alpha=0.5)
-plt.fill_between(data8['nof_threads'], min8, max8, facecolor='black', alpha=0.5)
+plt.fill_between(data2['nof_threads'], min2, max2, facecolor='green',   alpha=0.4)
+plt.fill_between(data3['nof_threads'], min3, max3, facecolor='blue',    alpha=0.4)
+plt.fill_between(data4['nof_threads'], min4, max4, facecolor='cyan',    alpha=0.4)
+plt.fill_between(data5['nof_threads'], min5, max5, facecolor='magenta', alpha=0.4)
+plt.fill_between(data6['nof_threads'], min6, max6, facecolor='black',   alpha=0.4)
+plt.fill_between(data7['nof_threads'], min7, max7, facecolor='yellow',  alpha=0.4)
+plt.fill_between(data8['nof_threads'], min8, max8, facecolor='black',   alpha=0.4)
 plt.xticks(np.arange(0, 1025, step=64), rotation=90)
 plt.grid(True, which="both")
 plt.title('Random walk - L2')
-plt.xlabel('Nof Threads')
+plt.xlabel('Number of threads')
 plt.ylabel('Slow-down')
 
 #plt.figure()

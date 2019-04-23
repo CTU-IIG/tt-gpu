@@ -17,7 +17,7 @@ scenarios = [# Filename                    L1/L2  USE_SHMmake  cachemode prog
         ("ca-noshm-1-L1smaller.json", "ca",       "no",          1),
         ("ca-noshm-2-L1bigger.json",  "ca",       "no",          2),
         ("ca-noshm-3-L1equal.json",   "ca",       "no",          0),
-      #  ("ca-shm-walkhasshm-0-L1equal.json",   "ca",       "yes",0),
+        ("ca-shm-walkhasshm-0-L1equal.json",   "ca",       "yes",0),
         ("ca-shm-0L1shared.json",     "ca",      "yes",          0)]
 
 for scenario in scenarios:
