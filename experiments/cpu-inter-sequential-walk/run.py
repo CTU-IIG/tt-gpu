@@ -13,7 +13,7 @@ inter = "0" # 0 = rnd, 1= seq
 nof_rep = 10
 
 scenarios = [# Filename                 use_zerocopy  interference method(0=rnd, 1=seq, 2=no)
-#             ("nozc-no-seqwalk.json",     0,             2),
+             ("nozc-no-seqwalk.json",     0,             2),
              ("zc-no-seqwalk.json",       1,             2),
              ("nozc-rnd-seqwalk.json",    0,            0),
              ("zc-rnd-seqwalk.json",      1,            0),

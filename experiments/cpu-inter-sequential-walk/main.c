@@ -20,11 +20,6 @@
 
 #define MAX_CORES		6
 
-#define CHECK(sts,msg)  \
-	if (sts == -1) {      \
-		perror(msg);        \
-		exit(-1);           \
-	}
 
 typedef enum{
     INTER_RAND,
@@ -110,20 +105,6 @@ void *gpu_thread(void *ptr){
 	CPU_ZERO(&set);
 	CPU_SET(data->cpu, &set);
 
-	//	struct sched_param param;
-	//	int sts;
-	//	int high_priority = sched_get_priority_max(SCHED_FIFO);
-	//	//int high_priority = sched_get_priority_max(SCHED_OTHER);
-	//	CHECK(high_priority,"sched_get_priority_max");
-	//
-	//	sts = sched_getparam(0, &param);
-	//	CHECK(sts,"sched_getparam");
-	//
-	//	param.sched_priority = high_priority;
-	//	sts = sched_setscheduler(0, SCHED_FIFO, &param);
-	//	//sts = sched_setscheduler(0, SCHED_OTHER, &param);
-	//	CHECK(sts,"sched_setscheduler");
-
 	/* Ensure that our test thread does not migrate to another CPU
 	 * during memguarding */
 
@@ -137,8 +118,7 @@ void *gpu_thread(void *ptr){
     for(int i = 0; i<5;i++){
         semwait(&startInf);
     }
-    //compute_kernel(10000000);
-#if 1
+
     // Initialize parameters
     if (initializeTest(params) < 0) return NULL;
 	
@@ -154,14 +134,13 @@ void *gpu_thread(void *ptr){
 
     // Clean up
     if (cleanUp(params) < 0) return NULL;
-#endif
+
     finishInference=1;
 	return NULL;
 }
 
 
-static int initThreads(param_t *params)
-{
+static int initThreads(param_t *params) {
     finishInference=0;
 	pthread_t threads[MAX_CORES];
 
