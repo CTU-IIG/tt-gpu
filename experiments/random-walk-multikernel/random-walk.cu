@@ -298,8 +298,8 @@ static int runTest(param_t *params){
 
     for (int i = 0; i < params->nofKernel; ++i){
         // Launch kernel
-        //randomWalkDiffElement<<<params->nofBlocks,params->nofThreads, 0, kernelp[i].stream>>>(kernelp[i]);
-        randomWalkSameElement<<<params->nofBlocks,params->nofThreads, 0, kernelp[i].stream>>>(kernelp[i]);
+        randomWalkDiffElement<<<params->nofBlocks,params->nofThreads, 0, kernelp[i].stream>>>(kernelp[i]);
+        //randomWalkSameElement<<<params->nofBlocks,params->nofThreads, 0, kernelp[i].stream>>>(kernelp[i]);
     }
 
     // Synchronize with device

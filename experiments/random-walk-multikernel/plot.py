@@ -3,17 +3,15 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 
-
-
-filename1 = "out/512-cg-kernels-1thread-same-elem.json"
-filename2 = "out/512-cg-kernels-32thread-same-elem.json"
-filename3 = "out/512-cg-kernels-128thread-same-elem.json"
-filename4 = "out/256-cg-kernels-1thread-same-elem.json"
-filename5 = "out/256-cg-kernels-32thread-same-elem.json"
-filename6 = "out/256-cg-kernels-128thread-same-elem.json"
-filename7 = "out/128-cg-kernels-1thread-same-elem.json"
-filename8 = "out/128-cg-kernels-32thread-same-elem.json"
-filename9 = "out/128-cg-kernels-128thread-same-elem.json"
+filename1 = "out-withbarrier/512-cg-kernels-1thread-same-elem.json"
+filename2 = "out-withbarrier/512-cg-kernels-32thread-same-elem.json"
+filename3 = "out-withbarrier/512-cg-kernels-128thread-same-elem.json"
+filename4 = "out-withbarrier/256-cg-kernels-1thread-same-elem.json"
+filename5 = "out-withbarrier/256-cg-kernels-32thread-same-elem.json"
+filename6 = "out-withbarrier/256-cg-kernels-128thread-same-elem.json"
+filename7 = "out-withbarrier/128-cg-kernels-1thread-same-elem.json"
+filename8 = "out-withbarrier/128-cg-kernels-32thread-same-elem.json"
+filename9 = "out-withbarrier/128-cg-kernels-128thread-same-elem.json"
 
 with open(filename1) as f1:
     data1 = json.load(f1)
