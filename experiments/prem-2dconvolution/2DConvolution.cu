@@ -138,6 +138,7 @@ static __device__ __inline__ void spinUntil(uint64_t endTime){
 #ifdef SCHEDULE
 // Phase times manually evaluated
 #if 0
+// Phase times normal
 #define PREM_PF_PHASE (2000)
 #define PREM_C_PHASE (700)
 #define PREM_WB_PHASE (500)
@@ -191,7 +192,7 @@ static __device__ __inline__ void syncWriteBack(const uint64_t startTime, const 
 #endif /*SCHEDULE*/
 
 //#define PREM_SHM_SIZE (32768/(2*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4 nj=1024 inputdata: 4096x4090 
-#define PREM_SHM_SIZE (32768/(4*sizeof(float))) // Each kernel has 32kBytes of SHM ni=4, nj=512 inputdata: 4098 4082, 1026x1022
+#define PREM_SHM_SIZE (32768/(4*sizeof(float))) // Each kernel has 16kBytes of SHM ni=4, nj=512 inputdata: 4098 4082, 1026x1022
 #define PREM_NJ_OVERLAP (2)
 
 #define PREM_NI_TILE_SIZE (4)
@@ -223,10 +224,8 @@ static __global__ void convolution2D_kernelPREM(kernel_data_t data){
 #ifndef PREM_SCHEDULE_ALL_PHASES
 
 #ifdef KERNELWISE_SYNC
-    //unsigned int reg_pftileoffset = ((data.nofKernel-1) * PREM_PF_PHASE_OFFSET) + (PREM_PF_PHASE + PREM_C_PHASE + PREM_WB_PHASE);
     unsigned int reg_pftileoffset = ((data.nofKernel) * PREM_PF_PHASE_OFFSET);
 #else
-    //unsigned int reg_pftileoffset = (((data.nofKernel * gridDim.x)-1) * PREM_PF_PHASE_OFFSET) + (PREM_PF_PHASE + PREM_C_PHASE + PREM_WB_PHASE);
     unsigned int reg_pftileoffset = (((data.nofKernel * gridDim.x)) * PREM_PF_PHASE_OFFSET);
 #endif /*KERNELWISE_SYNC*/
 
@@ -629,7 +628,9 @@ static void *executeKernel(void * ptr){
 
     }
     pthread_barrier_wait(&barrier);
+
     if (CheckCUDAError(cudaStreamSynchronize(kernelData.stream))) perror("Problem with stream sync");
+    
     *threadData->kernelData.stop = hostTimeMs();
 
     return NULL;

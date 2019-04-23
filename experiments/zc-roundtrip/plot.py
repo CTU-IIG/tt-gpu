@@ -9,8 +9,6 @@ file1='out/roundtrip.json'
 with open(file1) as f1:
     data1 = json.load(f1)
 
-
-
 times = np.array(data1['times']).astype(int)
 nofPasses = int(data1['nofpasses'])
 nofkernel = int(data1['nofkernel'])
@@ -38,10 +36,7 @@ print("RT avg: {:f}, max: {:f} min: {:f}".format(rtavg, rtmax, rtmin))
 y = [onewayavg,rtavg]
 minerr = []
 maxerr = []
-
 centers = np.arange(0,2,1)
-print(rtavg-rtmin)
-print(rtmax-rtavg)
 
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)

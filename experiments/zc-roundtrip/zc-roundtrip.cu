@@ -15,7 +15,6 @@
 #define NOF_PASSES    (10)
 #define START_TIME_OFFSET_NS (1000000000) //1s
 
-
 typedef struct {
     uint64_t *hostTimes;
     FILE *fd;
@@ -26,7 +25,6 @@ typedef struct {
     int64_t *token;
     uint64_t *targetTimes;
 } kernel_t;
-
 
 // Prints a message and returns zero if the given value is not cudaSuccess
 #define CheckCUDAError(val) (InternalCheckCUDAError((val), #val, __FILE__, __LINE__))
@@ -39,15 +37,6 @@ static int InternalCheckCUDAError(cudaError_t result, const char *fn,
             fn, cudaGetErrorString(result));
     return -1;
 }
-
-#if 0
-static __device__ __inline__ unsigned int get_smid(void)
-{
-    unsigned int ret;
-    asm("mov.u32 %0, %smid;":"=r"(ret) );
-    return ret;
-}
-#endif
 
 static __device__ __inline__ uint64_t getTime(void){
     uint64_t time;

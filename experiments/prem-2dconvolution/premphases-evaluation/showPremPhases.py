@@ -11,6 +11,7 @@ def drawCDF(labels, times, fig, title):
     ax = fig.add_subplot(1, 2, 1)
     for i, label in enumerate(labels):
         times_sorted = np.sort(times[i])
+        print("{:<10s} Avg: {:f}, Min: {:f}, Max: {:f}".format(label, np.mean(times[i][1:-1]), np.min(times[i][1:-1]), np.max(times[i][1:-1])))
         # Normalize
         p = 1.0 * np.arange(len(times[i])) / (len(times[i])-1)
         ax.plot(times_sorted,p*100, label=label)
@@ -53,7 +54,7 @@ def showTimesAll(filenames, titles):
         phases.append([int(i) for i in writebacktimes])
 
         prefetchtimes.sort()
-        print(prefetchtimes)
+        #print(prefetchtimes)
 
         labels = ['prefetch', 'compute', 'writeback']
 

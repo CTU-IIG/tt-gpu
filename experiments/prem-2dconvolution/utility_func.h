@@ -16,7 +16,6 @@ static inline int InternalCheckCUDAError(cudaError_t result, const char *fn,
     return -1;
 }
 
-
 static inline double hostTimeMs(void) {
   struct timespec ts;
   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {

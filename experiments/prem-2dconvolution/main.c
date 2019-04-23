@@ -6,9 +6,7 @@
 #include <stdlib.h>
 #include "2DConvolution.h"
 
-static int startBenchmark(param_t *params)
-{
-
+static int startBenchmark(param_t *params) {
 	cpu_set_t set;
 	/* Ensure that our test thread does not migrate to another CPU
 	 * during memguarding */
