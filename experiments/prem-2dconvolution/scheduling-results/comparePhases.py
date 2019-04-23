@@ -86,10 +86,10 @@ file1="data/512t-1b-1k-1024-prem-nosched-prof.json"
 file2="data/512t-2b-4k-1024-prem-nosched-prof.json"
 dim = (1,2)
 
-fig = plt.figure(figsize=[8,2])
+fig = plt.figure(figsize=[8,1.75])
 addPlot(file1, "PREM phases: 1 kernel with 1 block", fig, 1, dim)
 addPlot(file2, "PREM phases: 4 kernels with 2 blocks",  fig, 2, dim)
 fig.savefig('allphasescdf.pdf', format='pdf', bbox_inches='tight')
-plt.show()
+#plt.show()
 
 

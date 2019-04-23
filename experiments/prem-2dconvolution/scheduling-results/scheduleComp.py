@@ -70,7 +70,7 @@ def drawBarGraph(labels, times, fig, title):
     handle1 = ax.bar(centers_mean, y, width=width, yerr=[minerr, maxerr], alpha =0.5, hatch='//',ecolor='r', capsize=5, label='Avg. time')#, yerr=menStd) 
 
 
-    ax.set_ylabel("Avg. execution time [ms]")
+    ax.set_ylabel("Avg. scenario execution\ntime [ms]")
     ax.set_xticks(centers_labels)
     ax.set_xticklabels(labels,rotation=20, ha='right')
 #    ax.set_title(title)
@@ -167,5 +167,5 @@ if __name__ == "__main__":
                 ]
     
     showTimesAll(filenames1, titles1)
-    plt.tight_layout()
-    plt.show()
+#    plt.tight_layout()
+#    plt.show()
