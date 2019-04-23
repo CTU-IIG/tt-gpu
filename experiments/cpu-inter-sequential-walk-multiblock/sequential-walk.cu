@@ -53,7 +53,6 @@ static __global__ void getMeasurementOverhead(param_t params) {
     *params.target_realSum = sum;
 }
 
-
 static __global__ void sequentialWalk(kernel_param_t params) {
     unsigned int time_start, time_end, time_acc, oh;
     uint64_t sum=0;
