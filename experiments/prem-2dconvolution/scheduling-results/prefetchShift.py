@@ -169,7 +169,7 @@ def drawHist(labels, times, fig, title):
     ax.legend(loc='upper left')
     ax.set_title(title)
 
-def showTimesAll(filenames, titles, mergePhaseCDF=False):
+def showTimesAll(filenames, titles, store, mergePhaseCDF=False):
     pf_agg = []
     c_agg = []
     wb_agg = []
@@ -197,31 +197,26 @@ def showTimesAll(filenames, titles, mergePhaseCDF=False):
         c_agg.append(computeTimes)
         wb_agg.append(writebackTimes)
 
-    fig = plt.figure()
-    fig.suptitle("Prefetch times")
-    drawHist(titles, pf_agg, fig, "Histogram")
-    drawCDF(titles, pf_agg, fig, "CDF")
-    fig = plt.figure(figsize=[7,2])
-    labels = ['Prefetch time', 'Prefetch jitter', 'Compute time', 'Compute jitter']
-    drawBarGraph(titles, labels, pf_agg, fig, "Prefetch times", c_agg)
-    fig.savefig('phaseshift-prefetch.pdf', format='pdf', bbox_inches='tight')
+    if store == 'prefetch':
+        fig = plt.figure()
+        fig.suptitle("Prefetch times")
+        drawHist(titles, pf_agg, fig, "Histogram")
+        drawCDF(titles, pf_agg, fig, "CDF")
+        fig = plt.figure(figsize=[7,2])
+        labels = ['Prefetch time', 'Prefetch jitter', 'Compute time', 'Compute jitter']
+        drawBarGraph(titles, labels, pf_agg, fig, "Prefetch times", c_agg)
+        fig.savefig('phaseshift-prefetch.pdf', format='pdf', bbox_inches='tight')
 
-    fig = plt.figure()
-    fig.suptitle("Compute times")
-    drawHist(titles, c_agg, fig, "Histogram")
-    drawCDF(titles, c_agg, fig, "CDF")
-    fig = plt.figure()
-    labels = ['Compute time', 'Compute jitter']
-    drawBarGraph(titles, labels, c_agg, fig, "Compute times")
 
-    fig = plt.figure(figsize=[7,2])
-    fig.suptitle("Writeback times")
-    drawHist(titles, wb_agg, fig, "Histogram")
-    drawCDF(titles, wb_agg, fig, "CDF")
-    fig = plt.figure(figsize=[7,2])
-    labels = ['Writeback execution time', 'Writeback jitter']
-    drawBarGraph(titles, labels, wb_agg, fig, "Writeback times")
-    fig.savefig('phaseshift-writeback.pdf', format='pdf', bbox_inches='tight')
+    if store == 'writeback':
+        fig = plt.figure(figsize=[7,2])
+        fig.suptitle("Writeback times")
+        drawHist(titles, wb_agg, fig, "Histogram")
+        drawCDF(titles, wb_agg, fig, "CDF")
+        fig = plt.figure(figsize=[7,2])
+        labels = ['Writeback execution time', 'Writeback jitter']
+        drawBarGraph(titles, labels, wb_agg, fig, "Writeback times")
+        fig.savefig('phaseshift-writeback.pdf', format='pdf', bbox_inches='tight')
 
     if mergePhaseCDF:
         fig = plt.figure(figsize=[7,2])
@@ -319,14 +314,15 @@ if __name__ == "__main__":
                 ]
 
 
+
     #kernelsched PF
-    showTimesAll(filenames1, titles1)
+    showTimesAll(filenames1, titles1, store='prefetch')
     #tilesched PF
-#    showTimesAll(filenames2, titles2)
+#    showTimesAll(filenames2, titles2, store='prefetch')
     #kernelsched WB
-#    showTimesAll(filenames3, titles3)
+    showTimesAll(filenames3, titles3, store='writeback')
     #tilesched WB
-#    showTimesAll(filenames4, titles4)
+#    showTimesAll(filenames4, titles4, store='writeback')
     #nosched 
 #    showTimesAll(filenames5, titles5, mergePhaseCDF=True)
 
