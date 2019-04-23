@@ -151,7 +151,7 @@ def drawBlocks(agg_sm, nofKernel, minTime, maxTime, title):
             block.draw(ax, colors)
         ax.set_ylabel("NofThreads")
         if sm == 0:
-            ax.set_xticks([])
+            ax.set_xticklabels([])
         ax.set_yticks(range(0,2049,512))
         ax.set_xlim(0.000031*1e6,0.00005*1e6)
         if sm == 1:
