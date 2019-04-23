@@ -219,7 +219,7 @@ def showTimesAll(filenames, titles, mergePhaseCDF=False):
     drawHist(titles, wb_agg, fig, "Histogram")
     drawCDF(titles, wb_agg, fig, "CDF")
     fig = plt.figure(figsize=[7,2])
-    labels = ['Writeback time', 'Writeback jitter']
+    labels = ['Writeback execution time', 'Writeback jitter']
     drawBarGraph(titles, labels, wb_agg, fig, "Writeback times")
     fig.savefig('phaseshift-writeback.pdf', format='pdf', bbox_inches='tight')
 
