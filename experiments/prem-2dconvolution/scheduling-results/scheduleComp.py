@@ -67,7 +67,7 @@ def drawBarGraph(labels, times, fig, title):
         jitter_text.append("{:.2f}\%".format((jitter/mean)*100))
         print("{:<30s}: mean: {:f}ms, min: {:f}ms, max: {:f}ms, jitter: {:f}ms/{:f}%".format(label, mean, minv, maxv, maxv-minv, jitter_per[-1]))
 
-    handle1 = ax.bar(centers_mean, y, width=width, yerr=[minerr, maxerr], alpha =0.5, hatch='/',ecolor='r', capsize=5, label='Avg. time')#, yerr=menStd) 
+    handle1 = ax.bar(centers_mean, y, width=width, yerr=[minerr, maxerr], alpha =0.5, hatch='//',ecolor='r', capsize=5, label='Avg. time')#, yerr=menStd) 
 
 
     ax.set_ylabel("Avg. execution time [ms]")
@@ -75,7 +75,7 @@ def drawBarGraph(labels, times, fig, title):
     ax.set_xticklabels(labels,rotation=20, ha='right')
 #    ax.set_title(title)
     ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
-    handle2 = ax2.bar(centers_jitter, jitter_per, width=width,color='r', hatch='//', alpha=0.5, label='Jitter in \%')
+    handle2 = ax2.bar(centers_jitter, jitter_per, width=width,color='r', hatch=r'\\\\', alpha=0.5, label='Jitter in \%')
 
     for i in range(len(centers_jitter)):
         ax2.text(x = centers_jitter[i] , y = jitter_per[i]+0.1, s = jitter_text[i], size = 6, ha='center')
